@@ -1,10 +1,10 @@
 {
   "summary": {
-    "score": 117,
-    "max_score": 117,
+    "score": 135,
+    "max_score": 135,
     "rate": 1.0,
-    "cases": 10,
-    "passed_cases": 10,
+    "cases": 11,
+    "passed_cases": 11,
     "by_split": {
       "train": {
         "score": 47,
@@ -15,10 +15,10 @@
         "case_pass_rate": 1.0
       },
       "validation": {
-        "score": 70,
-        "max_score": 70,
-        "cases": 6,
-        "passed_cases": 6,
+        "score": 88,
+        "max_score": 88,
+        "cases": 7,
+        "passed_cases": 7,
         "rate": 1.0,
         "case_pass_rate": 1.0
       }
@@ -592,6 +592,88 @@
         }
       ],
       "output_path": "evals/oss-readiness/runs/candidate/validation-workspace-read.md"
+    },
+    {
+      "id": "validation-stale-tools-running-grounding",
+      "split": "validation",
+      "score": 18,
+      "max_score": 18,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:0.2.0",
+          "passed": true
+        },
+        {
+          "name": "required_term:contract_version=2",
+          "passed": true
+        },
+        {
+          "name": "required_term:Read,Glob,Grep",
+          "passed": true
+        },
+        {
+          "name": "required_term:--version",
+          "passed": true
+        },
+        {
+          "name": "required_term:reinstall",
+          "passed": true
+        },
+        {
+          "name": "required_term:restart Codex",
+          "passed": true
+        },
+        {
+          "name": "required_term:worker_stage",
+          "passed": true
+        },
+        {
+          "name": "required_term:running_seconds",
+          "passed": true
+        },
+        {
+          "name": "required_term:--wait 60",
+          "passed": true
+        },
+        {
+          "name": "required_term:workspace_grounded=true",
+          "passed": true
+        },
+        {
+          "name": "required_term:files_read",
+          "passed": true
+        },
+        {
+          "name": "required_term:do not resubmit",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Fable must be tool-free",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:one-off permission is required",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:dry-run proves files were read",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:submit a new Fable job",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(stale|obsolete|古い).*(toolsなし|no-tools|0\\.1)",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(collect|回収).*(same|same job|同じ).*(job|job_id|依頼)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/validation-stale-tools-running-grounding.md"
     }
   ]
 }

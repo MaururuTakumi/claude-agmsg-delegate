@@ -41,6 +41,7 @@ Do these in order before proposing changes or installing anything:
 9. Verify the installed Skill without running Claude model inference:
 
    ```bash
+   python3 "${CODEX_HOME:-$HOME/.codex}/skills/claude-agmsg-delegate/scripts/delegate_claude.py" --version
    python3 "${CODEX_HOME:-$HOME/.codex}/skills/claude-agmsg-delegate/scripts/delegate_claude.py" run \
      --model fable \
      --task "Installation verification only." \
@@ -50,7 +51,7 @@ Do these in order before proposing changes or installing anything:
    This dry-run may execute the read-only local `claude auth status --json`
    command. It must not send agmsg, create job state, or run a model.
 
-10. Report the resolved team, sender, receiver, model,
+10. Require delegate version `0.2.0` and `contract_version=2`, then report the resolved team, sender, receiver, model,
    `billing_mode: subscription`, paid `subscription_type`, execution mode,
    tool allowlist, and review requirement.
 
@@ -90,6 +91,10 @@ do not invoke Fable or Sonnet during dependency installation or verification.
   `Read,Glob,Grep` with `--permission-mode plan`. An explicit Sonnet implementer
   workspace-write job may use only `Read,Edit,Write,Glob,Grep` with
   `--permission-mode acceptEdits` there.
+- The runtime prompt requires at least one relevant `Read` call. Claude Code
+  runs with verbose `stream-json`; the wrapper accepts a result only when it
+  observes project-contained Read evidence and returns project-relative
+  `files_read` with `workspace_grounded=true`.
 - Workspace-write responses set `review_required=true`. Codex must compare the
   pre-existing status with the resulting `git status --short` and `git diff --`,
   reject unrelated edits, and run relevant tests before acceptance.
@@ -109,6 +114,8 @@ do not invoke Fable or Sonnet during dependency installation or verification.
   saved public state, and terminal output.
 - Every request and response has one stable `job_id`.
 - Timeout returns `running`; it does not launch a duplicate job.
+- Running output includes `worker_stage` and `running_seconds`; collection marks
+  a dead worker failed immediately instead of waiting for the full TTL.
 - `collect` is idempotent.
 - Large results spill to a permission-restricted job-local file.
 - Shell commands use argument arrays. Never introduce `shell=True`.
@@ -126,8 +133,9 @@ do not invoke Fable or Sonnet during dependency installation or verification.
 ## Proof boundaries
 
 - Green fixture tests prove wrapper logic, not live Claude authentication, account billing settings, or model availability.
-- A live dry-run proves the current auth-status fields, routing resolution, and
-  declared tool policy, not message delivery, actual file edits, review quality,
+- A live dry-run proves the current auth-status fields, routing resolution,
+  declared tool policy, and contract version, not message delivery, actual file
+  reads/edits, review quality,
   or whether account-level Extra usage is disabled.
 - A completed live job proves one request/response path, not every team or model.
 - `requested_model` is not proof of execution model; verify `actual_model`.

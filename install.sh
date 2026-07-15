@@ -37,7 +37,7 @@ DEST="$CODEX_HOME_VALUE/skills/claude-agmsg-delegate"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="$DEST.backup-$STAMP"
 
-for file in SKILL.md README.md LICENSE scripts/delegate_claude.py; do
+for file in SKILL.md README.md LICENSE VERSION scripts/delegate_claude.py; do
   [ -f "$ROOT/$file" ] || { echo "install: missing source file: $file" >&2; exit 1; }
 done
 
@@ -54,7 +54,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
       exit 3
     fi
   fi
-  echo "dry-run: copy SKILL.md README.md LICENSE scripts/ tests/"
+  echo "dry-run: copy SKILL.md README.md LICENSE VERSION scripts/ tests/"
   echo "dry-run: installer runs no Claude model, makes no agmsg change, and sends no network request"
   exit 0
 fi
@@ -74,6 +74,7 @@ mkdir -p "$DEST/scripts" "$DEST/tests"
 cp "$ROOT/SKILL.md" "$DEST/SKILL.md"
 cp "$ROOT/README.md" "$DEST/README.md"
 cp "$ROOT/LICENSE" "$DEST/LICENSE"
+cp "$ROOT/VERSION" "$DEST/VERSION"
 cp "$ROOT/scripts/delegate_claude.py" "$DEST/scripts/delegate_claude.py"
 cp "$ROOT/tests/test_delegate_claude.py" "$DEST/tests/test_delegate_claude.py"
 chmod +x "$DEST/scripts/delegate_claude.py" "$DEST/tests/test_delegate_claude.py"
@@ -81,6 +82,12 @@ chmod +x "$DEST/scripts/delegate_claude.py" "$DEST/tests/test_delegate_claude.py
 python3 -m py_compile "$DEST/scripts/delegate_claude.py"
 python3 "$DEST/scripts/delegate_claude.py" --help >/dev/null
 
-echo "installed: $DEST"
+INSTALLED_VERSION="$(python3 "$DEST/scripts/delegate_claude.py" --version)"
+[ "$INSTALLED_VERSION" = "$(cat "$DEST/VERSION")" ] || {
+  echo "install: installed version mismatch" >&2
+  exit 1
+}
+
+echo "installed: $DEST (version $INSTALLED_VERSION)"
 echo "next: restart Codex, then ask it to use \$claude-agmsg-delegate"
 echo "verify: python3 $DEST/scripts/delegate_claude.py run --model fable --task 'Installation verification only.' --dry-run"

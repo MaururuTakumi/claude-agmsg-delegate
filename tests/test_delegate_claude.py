@@ -141,6 +141,39 @@ if "--model" in args:
     model = args[args.index("--model") + 1]
 size = int(os.environ.get("FAKE_CLAUDE_RESULT_SIZE", "0"))
 result = "fake-result" if size <= 0 else "x" * size
+print(json.dumps({"type": "system", "subtype": "init"}))
+if os.environ.get("FAKE_CLAUDE_SKIP_READ", "0") != "1":
+    configured_read = os.environ.get("FAKE_CLAUDE_READ_FILE")
+    if configured_read:
+        read_file = Path(configured_read)
+    elif (Path.cwd() / "target.txt").is_file():
+        read_file = Path.cwd() / "target.txt"
+    else:
+        read_file = Path.cwd() / "README.md"
+    print(json.dumps({
+      "type": "assistant",
+      "message": {
+        "role": "assistant",
+        "content": [{
+          "type": "tool_use",
+          "id": "toolu_fake_read",
+          "name": "Read",
+          "input": {"file_path": str(read_file)},
+        }],
+      },
+    }))
+    print(json.dumps({
+      "type": "user",
+      "message": {
+        "role": "user",
+        "content": [{
+          "type": "tool_result",
+          "tool_use_id": "toolu_fake_read",
+          "content": "fixture contents",
+          "is_error": os.environ.get("FAKE_CLAUDE_READ_ERROR", "0") == "1",
+        }],
+      },
+    }))
 print(json.dumps({
   "type": "result",
   "result": result,
@@ -232,6 +265,16 @@ class DelegateTests(unittest.TestCase):
         result = subprocess.run(command, text=True, capture_output=True, env=env or self.env, timeout=10)
         return result, json.loads(result.stdout)
 
+    def test_version_matches_distribution_marker(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--version"],
+            text=True,
+            capture_output=True,
+            timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), (ROOT / "VERSION").read_text().strip())
+
     def test_dry_run_checks_subscription_without_model_or_agmsg_side_effects(self) -> None:
         invocation_log = self.base / "invocations.jsonl"
         env = self.env.copy()
@@ -239,6 +282,8 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
+        self.assertEqual(payload["delegate_version"], "0.2.0")
+        self.assertEqual(payload["contract_version"], 2)
         self.assertEqual(payload["agmsg_reader"], "api.sh")
         self.assertEqual(
             payload["claude_policy"],
@@ -248,6 +293,7 @@ class DelegateTests(unittest.TestCase):
                 "tools": ["Read", "Glob", "Grep"],
                 "permission_mode": "plan",
                 "review_required": False,
+                "workspace_grounding_required": True,
                 "subscription_only": True,
                 "auth_method": "claude.ai",
                 "api_provider": "firstParty",
@@ -278,6 +324,10 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--timeout", "5"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["delegate_version"], "0.2.0")
+        self.assertEqual(payload["contract_version"], 2)
+        self.assertTrue(payload["workspace_grounded"])
+        self.assertEqual(payload["files_read"], ["README.md"])
         self.assertEqual(payload["actual_model"], "claude-fable-test")
         self.assertEqual(payload["result"], "fake-result")
         self.assertEqual(payload["billing_mode"], "subscription")
@@ -294,8 +344,13 @@ class DelegateTests(unittest.TestCase):
         self.assertNotIn("total_cost_usd", public_output)
         self.assertNotIn('"cost_usd"', public_output)
         invocation = json.loads(invocation_log.read_text(encoding="utf-8").splitlines()[0])
+        self.assertIn("MUST use Read", invocation[0])
+        self.assertIn("project-relative paths", invocation[0])
         self.assertIn("-p", invocation)
         self.assertIn("--no-session-persistence", invocation)
+        self.assertIn("--verbose", invocation)
+        output_index = invocation.index("--output-format")
+        self.assertEqual(invocation[output_index + 1], "stream-json")
         self.assertNotIn("--max-budget-usd", invocation)
         setting_sources_index = invocation.index("--setting-sources")
         self.assertEqual(invocation[setting_sources_index + 1], "")
@@ -335,6 +390,8 @@ class DelegateTests(unittest.TestCase):
         self.assertEqual(payload["tools"], ["Read", "Glob", "Grep"])
         self.assertEqual(payload["permission_mode"], "plan")
         self.assertFalse(payload["review_required"])
+        self.assertTrue(payload["workspace_grounded"])
+        self.assertEqual(payload["files_read"], ["target.txt"])
 
         invocation = json.loads(invocation_log.read_text(encoding="utf-8").splitlines()[0])
         tools_index = invocation.index("--tools")
@@ -367,6 +424,8 @@ class DelegateTests(unittest.TestCase):
         self.assertEqual(payload["tools"], ["Read", "Edit", "Write", "Glob", "Grep"])
         self.assertEqual(payload["permission_mode"], "acceptEdits")
         self.assertTrue(payload["review_required"])
+        self.assertTrue(payload["workspace_grounded"])
+        self.assertEqual(payload["files_read"], ["target.txt"])
 
         invocation = json.loads(invocation_log.read_text(encoding="utf-8").splitlines()[0])
         tools_index = invocation.index("--tools")
@@ -433,6 +492,9 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--timeout", "0.05"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "running")
+        self.assertEqual(payload["worker_stage"], "claude_inference")
+        self.assertGreaterEqual(payload["running_seconds"], 0)
+        self.assertIn("--wait 60", payload["collect_command"])
         collect = [
             sys.executable,
             str(SCRIPT),
@@ -448,6 +510,76 @@ class DelegateTests(unittest.TestCase):
         self.assertEqual(collected_result.returncode, 0, collected_result.stderr)
         self.assertEqual(collected["status"], "completed")
         self.assertEqual(collected["result"], "fake-result")
+
+    def test_result_is_discarded_without_observed_project_read(self) -> None:
+        env = self.env.copy()
+        env["FAKE_CLAUDE_SKIP_READ"] = "1"
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn("no successful Read tool call", payload["error"])
+        self.assertNotIn("result", payload)
+
+    def test_result_is_discarded_when_read_tool_fails(self) -> None:
+        env = self.env.copy()
+        env["FAKE_CLAUDE_READ_ERROR"] = "1"
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn("no successful Read tool call", payload["error"])
+        self.assertNotIn("result", payload)
+
+    def test_result_is_discarded_when_read_leaves_project(self) -> None:
+        outside = self.base / "outside.txt"
+        outside.write_text("outside", encoding="utf-8")
+        env = self.env.copy()
+        env["FAKE_CLAUDE_READ_FILE"] = str(outside)
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn("outside the selected project", payload["error"])
+        self.assertNotIn("result", payload)
+
+    def test_collect_marks_dead_running_worker_failed_immediately(self) -> None:
+        job_id = "cad-dead-worker"
+        directory = self.state / job_id
+        directory.mkdir(parents=True)
+        state = {
+            "job_id": job_id,
+            "status": "running",
+            "delegate_version": "0.2.0",
+            "contract_version": 2,
+            "model": "fable",
+            "role": "reviewer",
+            "execution_mode": "workspace_read",
+            "tools": ["Read", "Glob", "Grep"],
+            "permission_mode": "plan",
+            "review_required": False,
+            "billing_mode": "subscription",
+            "worker_pid": 99999999,
+            "worker_stage": "claude_inference",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "created_epoch": time.time(),
+            "updated_at": "2026-01-01T00:00:00+00:00",
+            "ttl_seconds": 3600,
+        }
+        (directory / "state.json").write_text(json.dumps(state), encoding="utf-8")
+        collect = [
+            sys.executable,
+            str(SCRIPT),
+            "collect",
+            "--job-id",
+            job_id,
+            "--wait",
+            "0",
+            "--state-dir",
+            str(self.state),
+        ]
+        result, payload = self.run_json(collect)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["worker_stage"], "worker_exited")
+        self.assertIn("worker exited", payload["error"])
 
     def test_large_result_spills_to_job_file(self) -> None:
         env = self.env.copy()

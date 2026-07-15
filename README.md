@@ -32,6 +32,7 @@ If agmsg is missing or outdated, stop and ask me for explicit approval before ru
 After I approve, install agmsg and change to the target project where delegation will be used. If no teams exist, propose <target-project-name>-team and codex, show both, and wait for my confirmation before join.sh. Ask for delivery separately: recommend 1) turn, allow 2) off, and never choose monitor or both. Empty input or Enter means turn. Use only the provided whoami.sh, join.sh, and delivery.sh procedures. Do not join the temporary Skill clone just to pass verification. Then resume the final dry-run from the target project without invoking a Claude model.
 If the checks pass, install the Skill for my current Codex user.
 Do not run a Claude model or spend model usage during installation.
+Verify delegate_claude.py --version is 0.2.0.
 Verify the installation with delegate_claude.py --dry-run; this may run the local read-only `claude auth status --json` check, but must not send an agmsg job or run model inference.
 Report the resolved route, subscription-only policy, execution mode, tool allowlist, and review requirement. Never display or forward Claude CLI monetary usage estimates.
 ```
@@ -143,6 +144,7 @@ Codex Desktop
             ├─ Sonnet implementation: --workspace-write
             │    └─ Read,Edit,Write,Glob,Grep + acceptEdits
             ├─ repeat the auth check after inference; discard on change
+            ├─ verify observed Read events and emit project-relative files_read
             └─ agmsg delegate_response { job_id, status, result }
                  └─ Codex reviews diff, runs tests, and decides
 ```
@@ -158,13 +160,18 @@ already include `list-ids.sh` remain compatible, but fresh installs do not need 
 All jobs run with:
 
 ```text
---print --safe-mode --setting-sources "" --output-format json --no-session-persistence
+--print --safe-mode --setting-sources "" --output-format stream-json --verbose --no-session-persistence
 ```
 
 Advisory jobs add `--tools "Read,Glob,Grep" --permission-mode plan`. Explicit
 Sonnet workspace implementation adds `--tools "Read,Edit,Write,Glob,Grep"
 --permission-mode acceptEdits`. Neither mode enables Bash or a permission
 bypass.
+
+Version `0.2.0` uses runtime `contract_version=2`. It requires at least one
+observed `Read` tool event before accepting a Fable or Sonnet result. The wrapper
+returns `workspace_grounded=true` and project-relative `files_read`; a missing
+Read event or an observed path outside the selected project discards the result.
 
 ## CLI
 
@@ -233,6 +240,8 @@ Completed result:
 {
   "job_id": "cad-sonnet-20260715T024848Z-a1b2c3",
   "status": "completed",
+  "delegate_version": "0.2.0",
+  "contract_version": 2,
   "requested_model": "sonnet",
   "actual_model": "claude-sonnet-5",
   "role": "implementer",
@@ -240,6 +249,8 @@ Completed result:
   "tools": ["Read", "Edit", "Write", "Glob", "Grep"],
   "permission_mode": "acceptEdits",
   "review_required": true,
+  "workspace_grounded": true,
+  "files_read": ["src/example.ts"],
   "billing_mode": "subscription",
   "auth_method": "claude.ai",
   "api_provider": "firstParty",
@@ -257,9 +268,11 @@ Timed-out synchronous wait:
 {
   "job_id": "cad-sonnet-20260715T024900Z-d4e5f6",
   "status": "running",
+  "worker_stage": "claude_inference",
+  "running_seconds": 60.1,
   "billing_mode": "subscription",
   "subscription_type": "max",
-  "collect_command": "python3 ... collect --job-id ..."
+  "collect_command": "python3 ... collect --job-id ... --wait 60"
 }
 ```
 
@@ -329,6 +342,7 @@ git pull --ff-only
 make test
 ./install.sh --dry-run --force
 ./install.sh --force
+python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
 ```
 
 `--force` moves the previous installed Skill to a timestamped backup instead of deleting it.
@@ -396,7 +410,24 @@ For this Codex workflow, answer `1` or press Enter to select the recommended
 
 ### `status: running`
 
-The synchronous wait ended, not the worker. Use the returned `collect_command`. Do not submit the same task again.
+The synchronous wait ended. Check `worker_stage` and `running_seconds`, then use
+the returned `collect_command` with `--wait 60`. Do not submit the same task
+again. If the detached process has exited without a terminal state, collection
+returns `failed` immediately instead of displaying `running` until TTL.
+
+### Fable has `Read,Glob,Grep`, but another instruction says `toolsなし`
+
+`Read,Glob,Grep` is the intended contract. `toolsなし` is stale 0.1 guidance;
+do not switch Fable to tool-free mode and do not request a one-off permission
+exception. Update and reinstall the Skill, restart Codex, then verify:
+
+```bash
+python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
+```
+
+The expected version is `0.2.0`; dry-run reports `contract_version: 2`. A real
+completed job must also report `workspace_grounded: true` and non-empty
+project-relative `files_read`. A dry-run alone never proves that files were read.
 
 ### Claude reports the wrong model
 
@@ -413,7 +444,8 @@ make check
 
 The tests use fake agmsg scripts and a fake Claude executable. They cover
 paid-subscription acceptance, API/provider rejection, worker-time authentication
-changes, job correlation, timeout collection, large results, Sonnet workspace
+changes, job correlation, timeout/dead-worker collection, observed Read evidence,
+project-boundary rejection, version contracts, large results, Sonnet workspace
 edits, the file-tool allowlist, and review-required output. They do not send
 live messages, run paid models, or require credentials.
 
