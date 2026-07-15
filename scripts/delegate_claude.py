@@ -179,6 +179,27 @@ def required_script(agmsg_dir: Path, name: str) -> Path:
     return path
 
 
+def optional_script(agmsg_dir: Path, name: str) -> Path | None:
+    path = scripts_dir(agmsg_dir) / name
+    if path.is_file() and os.access(path, os.X_OK):
+        return path
+    return None
+
+
+def validate_agmsg_transport(agmsg_dir: Path) -> str:
+    """Validate the public agmsg transport and return its message reader."""
+    required_script(agmsg_dir, "whoami.sh")
+    required_script(agmsg_dir, "send.sh")
+    if optional_script(agmsg_dir, "api.sh") is not None:
+        return "api.sh"
+    if optional_script(agmsg_dir, "list-ids.sh") is not None:
+        return "list-ids.sh (legacy compatibility)"
+    raise DelegateError(
+        "agmsg has no supported message reader; install or update official agmsg so "
+        f"{scripts_dir(agmsg_dir) / 'api.sh'} exists and is executable"
+    )
+
+
 def run_checked(
     args: list[str],
     *,
@@ -305,10 +326,52 @@ def send_message(agmsg_dir: Path, team: str, from_agent: str, to_agent: str, bod
     run_checked([str(send), team, from_agent, to_agent, body])
 
 
-def list_messages(agmsg_dir: Path, team: str, to_agent: str, since_id: int = 0) -> list[dict[str, Any]]:
+def list_messages(agmsg_dir: Path, team: str, agent: str, limit: int = 1000) -> list[dict[str, str]]:
+    api = optional_script(agmsg_dir, "api.sh")
+    if api is not None:
+        output = run_checked(
+            [
+                str(api),
+                "get",
+                "teams",
+                team,
+                "messages",
+                "--agent",
+                agent,
+                "--limit",
+                str(limit),
+            ]
+        ).stdout
+        messages: list[dict[str, str]] = []
+        for line_number, line in enumerate(output.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise DelegateError(
+                    f"agmsg api.sh returned invalid JSONL on line {line_number}: {exc}"
+                ) from exc
+            if not isinstance(item, dict) or item.get("type") != "message_sent":
+                raise DelegateError(
+                    f"agmsg api.sh returned an unexpected messages record on line {line_number}"
+                )
+            required = ("id", "team", "from", "to", "body")
+            if any(not isinstance(item.get(field), str) for field in required):
+                raise DelegateError(
+                    f"agmsg api.sh returned an invalid messages record on line {line_number}"
+                )
+            if item["team"] != team:
+                continue
+            messages.append({field: item[field] for field in required})
+        return messages
+
+    # Older private installations may already have the pre-release reader used
+    # by this Skill. Keep it as a compatibility path, but never require it from
+    # a fresh official agmsg installation.
     list_ids = required_script(agmsg_dir, "list-ids.sh")
-    output = run_checked([str(list_ids), team, to_agent, "--since-id", str(since_id)]).stdout
-    messages: list[dict[str, Any]] = []
+    output = run_checked([str(list_ids), team, agent, "--since-id", "0"]).stdout
+    messages: list[dict[str, str]] = []
     for line in output.splitlines():
         # sqlite3 3.50+ escapes ASCII control characters in CLI output by
         # default, so char(31) may arrive as the printable two-byte sequence
@@ -317,25 +380,28 @@ def list_messages(agmsg_dir: Path, team: str, to_agent: str, since_id: int = 0) 
         parts = line.split(separator, 2)
         if len(parts) != 3 or not parts[0].isdigit():
             continue
-        messages.append({"id": int(parts[0]), "from": parts[1], "body": parts[2]})
+        messages.append(
+            {"id": parts[0], "team": team, "from": parts[1], "to": agent, "body": parts[2]}
+        )
     return messages
 
 
-def latest_message_id(agmsg_dir: Path, team: str, to_agent: str) -> int:
-    messages = list_messages(agmsg_dir, team, to_agent, 0)
-    return messages[-1]["id"] if messages else 0
-
-
-def find_job_message(messages: list[dict[str, Any]], job_id: str, expected_from: str) -> tuple[int, dict[str, Any]]:
-    for message in messages:
-        if message["from"] != expected_from:
+def find_job_message(
+    messages: list[dict[str, str]],
+    job_id: str,
+    expected_from: str,
+    expected_to: str,
+    expected_type: str,
+) -> tuple[str, dict[str, Any]]:
+    for message in reversed(messages):
+        if message["from"] != expected_from or message["to"] != expected_to:
             continue
         try:
             payload = json.loads(message["body"])
         except json.JSONDecodeError:
             continue
-        if payload.get("job_id") == job_id:
-            return int(message["id"]), payload
+        if payload.get("job_id") == job_id and payload.get("type") == expected_type:
+            return message["id"], payload
     raise DelegateError(f"agmsg message for job_id={job_id} was not found after send")
 
 
@@ -532,7 +598,6 @@ def worker_main(args: argparse.Namespace) -> int:
             response["result_preview"] = text_result[:500] + "..."
             response["result_file"] = str(result_file)
 
-        before = latest_message_id(Path(state["agmsg_dir"]), state["team"], state["from_agent"])
         send_message(
             Path(state["agmsg_dir"]),
             state["team"],
@@ -541,9 +606,11 @@ def worker_main(args: argparse.Namespace) -> int:
             json.dumps(response, ensure_ascii=False, separators=(",", ":")),
         )
         message_id, verified = find_job_message(
-            list_messages(Path(state["agmsg_dir"]), state["team"], state["from_agent"], before),
+            list_messages(Path(state["agmsg_dir"]), state["team"], state["from_agent"]),
             state["job_id"],
             state["to_agent"],
+            state["from_agent"],
+            "delegate_response",
         )
         state["status"] = "completed"
         state["response_message_id"] = message_id
@@ -636,6 +703,7 @@ def run_main(args: argparse.Namespace) -> int:
     project = Path(args.project).expanduser().resolve()
     agmsg_dir = Path(args.agmsg_dir).expanduser().resolve()
     state_dir = Path(args.state_dir).expanduser().resolve()
+    agmsg_reader = validate_agmsg_transport(agmsg_dir)
 
     if args.timeout < 0:
         raise DelegateError("timeout must be zero or greater")
@@ -694,6 +762,7 @@ def run_main(args: argparse.Namespace) -> int:
                 "team": team,
                 "from_agent": from_agent,
                 "to_agent": to_agent,
+                "agmsg_reader": agmsg_reader,
                 "request": request,
                 "claude_policy": {
                     "safe_mode": True,
@@ -713,10 +782,13 @@ def run_main(args: argparse.Namespace) -> int:
     if path.exists():
         raise DelegateError(f"job_id already exists; collect it instead of re-running: {job_id}")
 
-    before = latest_message_id(agmsg_dir, team, to_agent)
     send_message(agmsg_dir, team, from_agent, to_agent, envelope)
     message_id, verified_request = find_job_message(
-        list_messages(agmsg_dir, team, to_agent, before), job_id, from_agent
+        list_messages(agmsg_dir, team, to_agent),
+        job_id,
+        from_agent,
+        to_agent,
+        "delegate_request",
     )
     state: dict[str, Any] = {
         "job_id": job_id,
@@ -732,6 +804,7 @@ def run_main(args: argparse.Namespace) -> int:
         "to_agent": to_agent,
         "project": str(project),
         "agmsg_dir": str(agmsg_dir),
+        "agmsg_reader": agmsg_reader,
         "claude_bin": args.claude_bin,
         "effort": args.effort,
         "billing_mode": subscription_auth["billing_mode"],

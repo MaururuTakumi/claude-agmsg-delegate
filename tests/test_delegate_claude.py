@@ -20,20 +20,55 @@ set -euo pipefail
 db="${FAKE_AGMSG_DB:?}"
 id=1
 [ ! -f "$db" ] || id=$(( $(wc -l < "$db") + 1 ))
-printf '%s\x1f%s\x1f%s\x1f%s\n' "$id" "$2" "$3" "$4" >> "$db"
+printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$id" "$1" "$2" "$3" "$4" >> "$db"
 echo "Sent to $3 in team $1"
+'''
+
+
+API_SH = r'''#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+
+args = sys.argv[1:]
+if len(args) < 4 or args[:2] != ["get", "teams"] or args[3] != "messages":
+    raise SystemExit("unsupported fake api.sh request")
+team = args[2]
+agent = args[args.index("--agent") + 1] if "--agent" in args else ""
+limit = int(args[args.index("--limit") + 1]) if "--limit" in args else 30
+db = Path(os.environ["FAKE_AGMSG_DB"])
+records = []
+if db.is_file():
+    for line in db.read_text(encoding="utf-8").splitlines():
+        message_id, message_team, from_agent, to_agent, body = line.split("\x1f", 4)
+        if message_team != team:
+            continue
+        if agent and agent not in (from_agent, to_agent):
+            continue
+        records.append({
+            "type": "message_sent",
+            "id": message_id,
+            "team": message_team,
+            "from": from_agent,
+            "to": to_agent,
+            "body": body,
+            "at": "2026-01-01T00:00:00Z",
+        })
+for record in records[-limit:]:
+    print(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
 '''
 
 
 LIST_IDS_SH = r'''#!/usr/bin/env bash
 set -euo pipefail
 db="${FAKE_AGMSG_DB:?}"
+team="$1"
 to="$2"
 since=0
 [ "${3:-}" != "--since-id" ] || since="${4:-0}"
 [ -f "$db" ] || exit 0
-while IFS=$'\x1f' read -r id from dest body; do
+while IFS=$'\x1f' read -r id message_team from dest body; do
   [ "$id" -gt "$since" ] || continue
+  [ "$message_team" = "$team" ] || continue
   [ "$dest" = "$to" ] || continue
   if [ "${FAKE_AGMSG_CARET_SEPARATOR:-0}" = "1" ]; then
     printf '%s^_%s^_%s\n' "$id" "$from" "$body"
@@ -124,7 +159,7 @@ class DelegateTests(unittest.TestCase):
         scripts.mkdir(parents=True)
         for name, body in {
             "send.sh": SEND_SH,
-            "list-ids.sh": LIST_IDS_SH,
+            "api.sh": API_SH,
             "whoami.sh": WHOAMI_SH,
         }.items():
             path = scripts / name
@@ -204,6 +239,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
+        self.assertEqual(payload["agmsg_reader"], "api.sh")
         self.assertEqual(
             payload["claude_policy"],
             {
@@ -356,7 +392,23 @@ class DelegateTests(unittest.TestCase):
         self.assertIn("command failed: git", payload["error"])
         self.assertFalse(self.db.exists())
 
-    def test_sqlite_caret_escaped_unit_separator_round_trip(self) -> None:
+    def test_official_agmsg_api_round_trip_does_not_require_list_ids(self) -> None:
+        self.assertFalse((self.agmsg / "scripts" / "list-ids.sh").exists())
+        result, payload = self.run_json(self.command("--timeout", "5"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["result"], "fake-result")
+        saved = json.loads(next(self.state.glob("*/state.json")).read_text(encoding="utf-8"))
+        self.assertEqual(saved["agmsg_reader"], "api.sh")
+        self.assertIsInstance(saved["request_message_id"], str)
+        self.assertIsInstance(saved["response_message_id"], str)
+
+    def test_legacy_list_ids_caret_separator_remains_compatible(self) -> None:
+        scripts = self.agmsg / "scripts"
+        (scripts / "api.sh").unlink()
+        list_ids = scripts / "list-ids.sh"
+        list_ids.write_text(LIST_IDS_SH, encoding="utf-8")
+        list_ids.chmod(0o755)
         env = self.env.copy()
         env["FAKE_AGMSG_CARET_SEPARATOR"] = "1"
         result, payload = self.run_json(self.command("--timeout", "5"), env)
@@ -364,6 +416,16 @@ class DelegateTests(unittest.TestCase):
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["billing_mode"], "subscription")
         self.assertEqual(payload["result"], "fake-result")
+
+    def test_missing_official_message_reader_stops_with_update_guidance(self) -> None:
+        (self.agmsg / "scripts" / "api.sh").unlink()
+        result, payload = self.run_json(self.command("--dry-run"))
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(payload["status"], "error")
+        self.assertIn("install or update official agmsg", payload["error"])
+        self.assertIn("api.sh", payload["error"])
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
 
     def test_timeout_returns_running_then_collects(self) -> None:
         env = self.env.copy()

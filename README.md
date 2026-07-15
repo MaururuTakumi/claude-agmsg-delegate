@@ -27,8 +27,8 @@ Clone https://github.com/MaururuTakumi/claude-agmsg-delegate into a temporary di
 Read AGENTS.md and README.md completely.
 Run make test and ./install.sh --dry-run.
 Confirm that Claude Code is logged in with a paid Claude.ai subscription and that no API-key or cloud-provider credential is active.
-Before the final Skill dry-run, verify that ~/.agents/skills/agmsg/scripts/whoami.sh, send.sh, and list-ids.sh exist and are executable.
-If agmsg is missing, stop and ask me for explicit approval before running npx agmsg, joining a team, or choosing a delivery mode. Do not guess those settings, edit agmsg files directly, or add an api.sh compatibility fallback.
+Before the final Skill dry-run, verify that ~/.agents/skills/agmsg/scripts/whoami.sh, send.sh, and api.sh exist and are executable. api.sh is agmsg's local read-only JSONL reader, not an Anthropic API call.
+If agmsg is missing or outdated, stop and ask me for explicit approval before running npx agmsg, joining a team, or choosing a delivery mode. Do not guess those settings or edit agmsg files directly.
 After I approve, install agmsg and change to the target project where delegation will be used. If no teams exist, propose <target-project-name>-team and codex, show both, and wait for my confirmation before join.sh. Ask for delivery separately: recommend 1) turn, allow 2) off, and never choose monitor or both. Empty input or Enter means turn. Use only the provided whoami.sh, join.sh, and delivery.sh procedures. Do not join the temporary Skill clone just to pass verification. Then resume the final dry-run from the target project without invoking a Claude model.
 If the checks pass, install the Skill for my current Codex user.
 Do not run a Claude model or spend model usage during installation.
@@ -149,7 +149,11 @@ Codex Desktop
 
 agmsg is the job envelope and correlation channel. Authentication and billing are selected by Claude Code. tmux is not part of this execution path, and no existing interactive Claude session is required. The default logical mailboxes are `codex-delegate` and `claude-delegate`, separate from Ghostty/Gdash's visible `codex` and `claude` delivery loops.
 
-The wrapper, not Claude, owns all agmsg I/O. It calls only the supported `whoami.sh`, `send.sh`, and `list-ids.sh` scripts. It never reads the agmsg database or team files directly, and it never substitutes `api.sh` or another compatibility route.
+The wrapper, not Claude, owns all agmsg I/O. It calls the supported `whoami.sh`,
+`send.sh`, and official local read-only `api.sh` scripts. It never reads the
+agmsg database or team files directly. `api.sh` emits local JSONL and has no
+relationship to Anthropic API access or API billing. Older installations that
+already include `list-ids.sh` remain compatible, but fresh installs do not need it.
 
 All jobs run with:
 
@@ -357,7 +361,8 @@ Pass `--team` and `--from-agent` explicitly. The wrapper will not guess between 
 Stop before the final dry-run. Do not run a Claude model. The coding agent
 should explain that agmsg installation and team/delivery setup change local
 agent routing, then ask for explicit approval before running `npx agmsg`.
-It must not add or use `api.sh` as a compatibility fallback.
+Official agmsg `api.sh` is the supported local message reader. If it is absent,
+update agmsg after approval; do not invent or download a private `list-ids.sh`.
 
 After approval:
 
@@ -380,7 +385,7 @@ team, identity, or delivery mode. Verify these files exist and are executable:
 ```text
 ~/.agents/skills/agmsg/scripts/whoami.sh
 ~/.agents/skills/agmsg/scripts/send.sh
-~/.agents/skills/agmsg/scripts/list-ids.sh
+~/.agents/skills/agmsg/scripts/api.sh
 ```
 
 ### The first-time prompt shows `turn`, `off`, and `monitor`
