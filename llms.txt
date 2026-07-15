@@ -1,6 +1,6 @@
 # claude-agmsg-delegate
 
-Purpose: Codex Skill for bounded advisory delegation to Claude Fable or Sonnet through agmsg.
+Purpose: Codex Skill for bounded, headless review and opt-in Sonnet Git-workspace implementation through agmsg, restricted to a verified paid Claude.ai subscription.
 
 Repository: https://github.com/MaururuTakumi/claude-agmsg-delegate
 License: MIT
@@ -11,17 +11,29 @@ AI install sequence:
 1. Read AGENTS.md, README.md, SKILL.md.
 2. Run: make test
 3. Run: ./install.sh --dry-run
-4. If authorized: ./install.sh
-5. Restart Codex.
-6. Verify with delegate_claude.py run --model fable --task "Installation verification only." --dry-run
-7. Do not invoke a paid model during install or verification.
+4. Before final verification, change to the target project where delegation will be used; never join the temporary Skill clone merely to pass verification. Require executable agmsg `whoami.sh`, `send.sh`, and `list-ids.sh` scripts.
+5. If agmsg is missing, stop and get explicit approval before `npx agmsg`, team join, or delivery-mode setup. After approval, use only `whoami.sh`, `join.sh`, and `delivery.sh` from the target project. With no existing team, propose `<target-project-name>-team / codex` and wait for confirmation. Offer only `1) turn` (recommended; Enter means turn) or `2) off`; never select `monitor` or `both`. Never silently create or edit agmsg files directly.
+6. If authorized: ./install.sh
+7. Restart Codex.
+8. Verify with delegate_claude.py run --model fable --task "Installation verification only." --dry-run
+9. The dry-run may execute local read-only `claude auth status --json`, but must not send agmsg or invoke a model.
 
 Safety invariants:
-- Codex owns local state, edits, commands, tests, and final decisions.
-- Claude has no tools and runs in safe mode.
+- Codex owns orchestration, diff review, commands, tests, integration, and final decisions.
+- Fable and advisory Sonnet may use only `Read,Glob,Grep` with `--permission-mode plan` in the target project directory. Explicit Sonnet implementer jobs require a Git worktree, may use only `Read,Edit,Write,Glob,Grep` with `--permission-mode acceptEdits`, and return `review_required=true`.
+- Codex reviews before/after status and diff and runs tests after every workspace-write job.
+- No Claude UI, tmux pane, existing session, daemon, or monitor is required.
+- Default agmsg mailboxes are `codex-delegate` and `claude-delegate`, isolated from visible Ghostty/Gdash loops.
+- Require `claude.ai` + `firstParty` + a paid subscription before send and immediately before inference.
+- Reject API keys, auth tokens, custom base URLs, API-key helpers, and cloud-provider routes; never fall back.
+- Pass only a minimal environment allowlist and use `--safe-mode --setting-sources ""`.
+- Recheck auth after inference and discard output if it changed.
+- Account-level Extra usage / usage credits is a separate setting and must be off for zero variable charges.
 - No permission bypass.
 - No direct agmsg DB/team/config access.
 - No automatic role/hook changes.
+- No automatic `npx agmsg`, team join, or delivery-mode selection.
+- No agmsg `monitor` or `both` mode for this Codex workflow.
 - No secrets or raw large logs.
 - job_id correlates every request and response.
 - timeout returns running; collect is idempotent.

@@ -1,24 +1,24 @@
 {
   "summary": {
-    "score": 35,
-    "max_score": 35,
+    "score": 98,
+    "max_score": 98,
     "rate": 1.0,
-    "cases": 5,
-    "passed_cases": 5,
+    "cases": 9,
+    "passed_cases": 9,
     "by_split": {
       "train": {
-        "score": 26,
-        "max_score": 26,
+        "score": 43,
+        "max_score": 43,
         "cases": 4,
         "passed_cases": 4,
         "rate": 1.0,
         "case_pass_rate": 1.0
       },
       "validation": {
-        "score": 9,
-        "max_score": 9,
-        "cases": 1,
-        "passed_cases": 1,
+        "score": 55,
+        "max_score": 55,
+        "cases": 5,
+        "passed_cases": 5,
         "rate": 1.0,
         "case_pass_rate": 1.0
       }
@@ -100,8 +100,8 @@
     {
       "id": "security-boundary",
       "split": "train",
-      "score": 7,
-      "max_score": 7,
+      "score": 24,
+      "max_score": 24,
       "passed": true,
       "checks": [
         {
@@ -109,7 +109,27 @@
           "passed": true
         },
         {
-          "name": "required_term:--tools \"\"",
+          "name": "required_term:Read,Glob,Grep",
+          "passed": true
+        },
+        {
+          "name": "required_term:--permission-mode plan",
+          "passed": true
+        },
+        {
+          "name": "required_term:--workspace-write",
+          "passed": true
+        },
+        {
+          "name": "required_term:Read,Edit,Write,Glob,Grep",
+          "passed": true
+        },
+        {
+          "name": "required_term:--permission-mode acceptEdits",
+          "passed": true
+        },
+        {
+          "name": "required_term:review_required=true",
           "passed": true
         },
         {
@@ -117,7 +137,35 @@
           "passed": true
         },
         {
-          "name": "required_term:--max-budget-usd",
+          "name": "required_term:authMethod=claude.ai",
+          "passed": true
+        },
+        {
+          "name": "required_term:apiProvider=firstParty",
+          "passed": true
+        },
+        {
+          "name": "required_term:ANTHROPIC_API_KEY",
+          "passed": true
+        },
+        {
+          "name": "required_term:Extra usage",
+          "passed": true
+        },
+        {
+          "name": "required_term:allowlist",
+          "passed": true
+        },
+        {
+          "name": "required_term:--setting-sources \"\"",
+          "passed": true
+        },
+        {
+          "name": "required_term:total_cost_usd",
+          "passed": true
+        },
+        {
+          "name": "required_term:api.sh",
           "passed": true
         },
         {
@@ -129,7 +177,27 @@
           "passed": true
         },
         {
-          "name": "required_regex:(?i)Codex.*(final|最終)",
+          "name": "forbidden_term:fall back to API billing",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Bash is enabled",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:display the dollar estimate",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Fable cannot read files",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)Codex.*(diff|review|レビュー).*(final|accept|承認|最終)",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(never|must not|do not).*(display|forward).*(cost|monetary|dollar)",
           "passed": true
         }
       ],
@@ -214,6 +282,230 @@
         }
       ],
       "output_path": "evals/oss-readiness/runs/candidate/validation-x-launch.md"
+    },
+    {
+      "id": "validation-missing-agmsg",
+      "split": "validation",
+      "score": 11,
+      "max_score": 11,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:npx agmsg",
+          "passed": true
+        },
+        {
+          "name": "required_term:explicit approval",
+          "passed": true
+        },
+        {
+          "name": "required_term:target project",
+          "passed": true
+        },
+        {
+          "name": "required_term:whoami.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:join.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:delivery.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:--dry-run",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:edit the agmsg database directly",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:continue to Claude model inference",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:join the temporary Skill clone",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(stop|停止).*(approval|承認)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/validation-missing-agmsg.md"
+    },
+    {
+      "id": "validation-first-team-delivery",
+      "split": "validation",
+      "score": 12,
+      "max_score": 12,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:<target-project-name>-team",
+          "passed": true
+        },
+        {
+          "name": "required_term:codex",
+          "passed": true
+        },
+        {
+          "name": "required_term:confirmation",
+          "passed": true
+        },
+        {
+          "name": "required_term:1) turn",
+          "passed": true
+        },
+        {
+          "name": "required_term:Enter",
+          "passed": true
+        },
+        {
+          "name": "required_term:2) off",
+          "passed": true
+        },
+        {
+          "name": "required_term:monitor",
+          "passed": true
+        },
+        {
+          "name": "required_term:--dry-run",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:monitor is recommended",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:choose 3) monitor",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:I created the team without confirmation",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(never|must not|do not).*(monitor|both)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/validation-first-team-delivery.md"
+    },
+    {
+      "id": "validation-monetary-output",
+      "split": "validation",
+      "score": 9,
+      "max_score": 9,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:total_cost_usd",
+          "passed": true
+        },
+        {
+          "name": "required_term:subscription",
+          "passed": true
+        },
+        {
+          "name": "required_term:api.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:stop",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:display the estimate",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:add an api.sh compatibility fallback",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:forward the dollar value",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(never|must not|do not).*(display|quote|forward).*(total_cost_usd|cost|monetary|estimate)",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(never|must not|do not).*(api\\.sh|compatibility fallback)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/validation-monetary-output.md"
+    },
+    {
+      "id": "validation-workspace-read",
+      "split": "validation",
+      "score": 14,
+      "max_score": 14,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:Read,Glob,Grep",
+          "passed": true
+        },
+        {
+          "name": "required_term:--permission-mode plan",
+          "passed": true
+        },
+        {
+          "name": "required_term:project directory",
+          "passed": true
+        },
+        {
+          "name": "required_term:team",
+          "passed": true
+        },
+        {
+          "name": "required_term:message routing",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:--tools \"\"",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:read the whole home directory",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:team grants file access",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Edit is allowed",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Write is allowed",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Bash is allowed",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Git is required for reading",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(no|cannot|must not|do not).*(Edit|Write|Bash)",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)team.*(message routing|routing).*(not|does not|doesn't).*(file|filesystem)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/validation-workspace-read.md"
     }
   ]
 }
