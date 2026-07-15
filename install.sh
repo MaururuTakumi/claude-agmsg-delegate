@@ -55,7 +55,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     fi
   fi
   echo "dry-run: copy SKILL.md README.md LICENSE scripts/ tests/"
-  echo "dry-run: no Claude invocation, no agmsg change, no network request"
+  echo "dry-run: installer runs no Claude model, makes no agmsg change, and sends no network request"
   exit 0
 fi
 

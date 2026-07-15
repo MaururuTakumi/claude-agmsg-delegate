@@ -35,7 +35,11 @@ since=0
 while IFS=$'\x1f' read -r id from dest body; do
   [ "$id" -gt "$since" ] || continue
   [ "$dest" = "$to" ] || continue
-  printf '%s\x1f%s\x1f%s\n' "$id" "$from" "$body"
+  if [ "${FAKE_AGMSG_CARET_SEPARATOR:-0}" = "1" ]; then
+    printf '%s^_%s^_%s\n' "$id" "$from" "$body"
+  else
+    printf '%s\x1f%s\x1f%s\n' "$id" "$from" "$body"
+  fi
 done < "$db"
 '''
 
@@ -47,10 +51,59 @@ echo "agent=codex teams=test-team type=codex project=$1"
 
 FAKE_CLAUDE = r'''#!/usr/bin/env python3
 import json, os, sys, time
+from pathlib import Path
+args = sys.argv[1:]
+environment_log = os.environ.get("FAKE_CLAUDE_ENV_LOG")
+if environment_log:
+    with open(environment_log, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps({
+          "future_provider_present": "CLAUDE_CODE_FUTURE_PROVIDER_TOKEN" in os.environ,
+          "anthropic_api_key_present": "ANTHROPIC_API_KEY" in os.environ,
+        }) + "\n")
+if "auth" in args and "status" in args:
+    call_number = 1
+    counter_path = os.environ.get("FAKE_CLAUDE_AUTH_COUNTER")
+    if counter_path:
+        try:
+            call_number = int(open(counter_path, encoding="utf-8").read()) + 1
+        except (FileNotFoundError, ValueError):
+            call_number = 1
+        with open(counter_path, "w", encoding="utf-8") as handle:
+            handle.write(str(call_number))
+
+    auth_method = os.environ.get("FAKE_CLAUDE_AUTH_METHOD", "claude.ai")
+    api_provider = os.environ.get("FAKE_CLAUDE_API_PROVIDER", "firstParty")
+    subscription_type = os.environ.get("FAKE_CLAUDE_SUBSCRIPTION_TYPE", "max")
+    switch_after = int(os.environ.get("FAKE_CLAUDE_AUTH_SWITCH_AFTER", "0"))
+    if switch_after and call_number > switch_after:
+        auth_method = "api_key"
+        subscription_type = ""
+    print(json.dumps({
+      "loggedIn": os.environ.get("FAKE_CLAUDE_LOGGED_IN", "1") != "0",
+      "authMethod": auth_method,
+      "apiProvider": api_provider,
+      "subscriptionType": subscription_type,
+    }))
+    raise SystemExit(0)
+
+edit_file = os.environ.get("FAKE_CLAUDE_EDIT_FILE")
+enabled_tools = ""
+if "--tools" in args:
+    enabled_tools = args[args.index("--tools") + 1]
+if edit_file and ("Edit" in enabled_tools or "Write" in enabled_tools):
+    Path(edit_file).write_text(
+        os.environ.get("FAKE_CLAUDE_EDIT_CONTENT", "edited-by-fake-sonnet"),
+        encoding="utf-8",
+    )
+
+invocation_log = os.environ.get("FAKE_CLAUDE_INVOCATION_LOG")
+if invocation_log:
+    with open(invocation_log, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(args) + "\n")
 time.sleep(float(os.environ.get("FAKE_CLAUDE_SLEEP", "0")))
 model = "fable"
-if "--model" in sys.argv:
-    model = sys.argv[sys.argv.index("--model") + 1]
+if "--model" in args:
+    model = args[args.index("--model") + 1]
 size = int(os.environ.get("FAKE_CLAUDE_RESULT_SIZE", "0"))
 result = "fake-result" if size <= 0 else "x" * size
 print(json.dumps({
@@ -83,7 +136,35 @@ class DelegateTests(unittest.TestCase):
         self.db = self.base / "messages.db.txt"
         self.state = self.base / "state"
         self.env = os.environ.copy()
+        blocked_exact = {
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_CUSTOM_HEADERS",
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "CLAUDE_CODE_API_KEY_HELPER_TTL_MS",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+            "CLAUDE_CODE_SKIP_FOUNDRY_AUTH",
+            "CLAUDE_CODE_SKIP_MANTLE_AUTH",
+            "CLAUDE_CODE_SKIP_VERTEX_AUTH",
+            "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_FOUNDRY",
+            "CLAUDE_CODE_USE_MANTLE",
+            "CLAUDE_CODE_USE_VERTEX",
+        }
+        for name in list(self.env):
+            if name in blocked_exact or (
+                name.startswith("ANTHROPIC_")
+                and (
+                    name.endswith("_API_KEY")
+                    or name.endswith("_AUTH_TOKEN")
+                    or name.endswith("_BASE_URL")
+                )
+            ):
+                self.env.pop(name)
         self.env["FAKE_AGMSG_DB"] = str(self.db)
+        self.env["CLAUDE_AGMSG_DELEGATE_TESTING"] = "1"
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -116,24 +197,173 @@ class DelegateTests(unittest.TestCase):
         result = subprocess.run(command, text=True, capture_output=True, env=env or self.env, timeout=10)
         return result, json.loads(result.stdout)
 
-    def test_dry_run_has_no_side_effects_and_no_tools(self) -> None:
-        result, payload = self.run_json(self.command("--dry-run"))
+    def test_dry_run_checks_subscription_without_model_or_agmsg_side_effects(self) -> None:
+        invocation_log = self.base / "invocations.jsonl"
+        env = self.env.copy()
+        env["FAKE_CLAUDE_INVOCATION_LOG"] = str(invocation_log)
+        result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
-        self.assertEqual(payload["claude_policy"], {"safe_mode": True, "tools": []})
+        self.assertEqual(
+            payload["claude_policy"],
+            {
+                "safe_mode": True,
+                "execution_mode": "workspace_read",
+                "tools": ["Read", "Glob", "Grep"],
+                "permission_mode": "plan",
+                "review_required": False,
+                "subscription_only": True,
+                "auth_method": "claude.ai",
+                "api_provider": "firstParty",
+                "subscription_type": "max",
+            },
+        )
+        self.assertEqual(payload["request"]["billing_mode"], "subscription")
         self.assertFalse(self.db.exists())
         self.assertFalse(self.state.exists())
+        self.assertFalse(invocation_log.exists())
+
+    def test_inferred_route_uses_headless_delegate_mailboxes(self) -> None:
+        command = self.command("--dry-run")
+        for option in ["--team", "--from-agent", "--to-agent"]:
+            index = command.index(option)
+            del command[index:index + 2]
+        result, payload = self.run_json(command)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["team"], "test-team")
+        self.assertEqual(payload["from_agent"], "codex-delegate")
+        self.assertEqual(payload["to_agent"], "claude-delegate")
+        self.assertFalse(self.db.exists())
 
     def test_completed_round_trip_reports_actual_model(self) -> None:
-        result, payload = self.run_json(self.command("--timeout", "5"))
+        invocation_log = self.base / "invocations.jsonl"
+        env = self.env.copy()
+        env["FAKE_CLAUDE_INVOCATION_LOG"] = str(invocation_log)
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["actual_model"], "claude-fable-test")
         self.assertEqual(payload["result"], "fake-result")
+        self.assertEqual(payload["billing_mode"], "subscription")
+        self.assertEqual(payload["auth_method"], "claude.ai")
+        self.assertEqual(payload["api_provider"], "firstParty")
+        self.assertEqual(payload["subscription_type"], "max")
+        self.assertEqual(payload["execution_mode"], "workspace_read")
+        self.assertEqual(payload["tools"], ["Read", "Glob", "Grep"])
+        self.assertEqual(payload["permission_mode"], "plan")
+        self.assertFalse(payload["review_required"])
+        self.assertNotIn("cost_usd", payload)
+        self.assertNotIn("total_cost_usd", payload)
+        public_output = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn("total_cost_usd", public_output)
+        self.assertNotIn('"cost_usd"', public_output)
+        invocation = json.loads(invocation_log.read_text(encoding="utf-8").splitlines()[0])
+        self.assertIn("-p", invocation)
+        self.assertIn("--no-session-persistence", invocation)
+        self.assertNotIn("--max-budget-usd", invocation)
+        setting_sources_index = invocation.index("--setting-sources")
+        self.assertEqual(invocation[setting_sources_index + 1], "")
+        tools_index = invocation.index("--tools")
+        self.assertEqual(invocation[tools_index + 1], "Read,Glob,Grep")
+        permission_index = invocation.index("--permission-mode")
+        self.assertEqual(invocation[permission_index + 1], "plan")
+        self.assertNotIn("Edit", invocation[tools_index + 1])
+        self.assertNotIn("Write", invocation[tools_index + 1])
+        self.assertNotIn("Bash", invocation[tools_index + 1])
         messages = self.db.read_text(encoding="utf-8")
         self.assertIn("delegate_request", messages)
         self.assertIn("delegate_response", messages)
         self.assertIn(payload["job_id"], messages)
+        self.assertNotIn("total_cost_usd", messages)
+        self.assertNotIn('"cost_usd"', messages)
+        saved_state = next(self.state.glob("*/state.json")).read_text(encoding="utf-8")
+        self.assertNotIn("total_cost_usd", saved_state)
+        self.assertNotIn('"cost_usd"', saved_state)
+
+    def test_fable_reads_project_directory_without_editing(self) -> None:
+        project = self.base / "read-project"
+        project.mkdir()
+        target = project / "target.txt"
+        target.write_text("must-stay-unchanged", encoding="utf-8")
+
+        command = self.command("--timeout", "5", "--project", str(project))
+        invocation_log = self.base / "read-invocations.jsonl"
+        env = self.env.copy()
+        env["FAKE_CLAUDE_INVOCATION_LOG"] = str(invocation_log)
+        env["FAKE_CLAUDE_EDIT_FILE"] = str(target)
+
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(target.read_text(encoding="utf-8"), "must-stay-unchanged")
+        self.assertEqual(payload["execution_mode"], "workspace_read")
+        self.assertEqual(payload["tools"], ["Read", "Glob", "Grep"])
+        self.assertEqual(payload["permission_mode"], "plan")
+        self.assertFalse(payload["review_required"])
+
+        invocation = json.loads(invocation_log.read_text(encoding="utf-8").splitlines()[0])
+        tools_index = invocation.index("--tools")
+        self.assertEqual(invocation[tools_index + 1], "Read,Glob,Grep")
+        permission_index = invocation.index("--permission-mode")
+        self.assertEqual(invocation[permission_index + 1], "plan")
+        self.assertNotIn("Edit", invocation[tools_index + 1])
+        self.assertNotIn("Write", invocation[tools_index + 1])
+        self.assertNotIn("Bash", invocation[tools_index + 1])
+
+    def test_sonnet_workspace_write_edits_git_workspace_and_requires_review(self) -> None:
+        project = self.base / "write-project"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        target = project / "target.txt"
+        target.write_text("before", encoding="utf-8")
+
+        command = self.command("--workspace-write", "--timeout", "5")
+        command[command.index("--model") + 1] = "sonnet"
+        command.extend(["--role", "implementer", "--project", str(project)])
+        invocation_log = self.base / "workspace-invocations.jsonl"
+        env = self.env.copy()
+        env["FAKE_CLAUDE_INVOCATION_LOG"] = str(invocation_log)
+        env["FAKE_CLAUDE_EDIT_FILE"] = str(target)
+
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(target.read_text(encoding="utf-8"), "edited-by-fake-sonnet")
+        self.assertEqual(payload["execution_mode"], "workspace_write")
+        self.assertEqual(payload["tools"], ["Read", "Edit", "Write", "Glob", "Grep"])
+        self.assertEqual(payload["permission_mode"], "acceptEdits")
+        self.assertTrue(payload["review_required"])
+
+        invocation = json.loads(invocation_log.read_text(encoding="utf-8").splitlines()[0])
+        tools_index = invocation.index("--tools")
+        self.assertEqual(invocation[tools_index + 1], "Read,Edit,Write,Glob,Grep")
+        permission_index = invocation.index("--permission-mode")
+        self.assertEqual(invocation[permission_index + 1], "acceptEdits")
+        self.assertNotIn("Bash", invocation[tools_index + 1])
+        self.assertNotIn("--dangerously-skip-permissions", invocation)
+
+    def test_workspace_write_rejects_non_sonnet_or_non_git_project_before_send(self) -> None:
+        result, payload = self.run_json(self.command("--workspace-write", "--dry-run"))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires --model sonnet", payload["error"])
+        self.assertFalse(self.db.exists())
+
+        non_git = self.base / "not-git"
+        non_git.mkdir()
+        command = self.command("--workspace-write", "--dry-run")
+        command[command.index("--model") + 1] = "sonnet"
+        command.extend(["--role", "implementer", "--project", str(non_git)])
+        result, payload = self.run_json(command)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("command failed: git", payload["error"])
+        self.assertFalse(self.db.exists())
+
+    def test_sqlite_caret_escaped_unit_separator_round_trip(self) -> None:
+        env = self.env.copy()
+        env["FAKE_AGMSG_CARET_SEPARATOR"] = "1"
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["billing_mode"], "subscription")
+        self.assertEqual(payload["result"], "fake-result")
 
     def test_timeout_returns_running_then_collects(self) -> None:
         env = self.env.copy()
@@ -185,6 +415,96 @@ class DelegateTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertIn("team", payload["error"])
         self.assertFalse(self.db.exists())
+
+    def test_api_and_cloud_provider_environment_is_rejected_before_send(self) -> None:
+        for name in [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX",
+            "CLAUDE_CODE_USE_FOUNDRY",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+        ]:
+            with self.subTest(name=name):
+                env = self.env.copy()
+                env[name] = "test-only-value"
+                result, payload = self.run_json(self.command("--dry-run"), env)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(payload["status"], "error")
+                self.assertIn("subscription-only policy", payload["error"])
+                self.assertIn(name, payload["error"])
+                self.assertFalse(self.db.exists())
+                self.assertFalse(self.state.exists())
+
+    def test_unknown_future_provider_environment_is_not_passed_to_claude(self) -> None:
+        env = self.env.copy()
+        environment_log = self.base / "claude-environment.jsonl"
+        env["CLAUDE_CODE_FUTURE_PROVIDER_TOKEN"] = "test-only-value"
+        env["FAKE_CLAUDE_ENV_LOG"] = str(environment_log)
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["status"], "completed")
+        entries = [json.loads(line) for line in environment_log.read_text().splitlines()]
+        self.assertGreaterEqual(len(entries), 4)
+        self.assertTrue(all(not entry["future_provider_present"] for entry in entries))
+        self.assertTrue(all(not entry["anthropic_api_key_present"] for entry in entries))
+
+    def test_non_subscription_auth_status_is_rejected_before_send(self) -> None:
+        env = self.env.copy()
+        env["FAKE_CLAUDE_AUTH_METHOD"] = "api_key"
+        env["FAKE_CLAUDE_SUBSCRIPTION_TYPE"] = ""
+        result, payload = self.run_json(self.command("--dry-run"), env)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(payload["status"], "error")
+        self.assertIn("authMethod=claude.ai", payload["error"])
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_logged_out_status_is_rejected_before_send(self) -> None:
+        env = self.env.copy()
+        env["FAKE_CLAUDE_LOGGED_IN"] = "0"
+        result, payload = self.run_json(self.command("--dry-run"), env)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(payload["status"], "error")
+        self.assertIn("loggedIn=true", payload["error"])
+        self.assertFalse(self.db.exists())
+
+    def test_worker_rechecks_auth_and_does_not_infer_after_auth_changes(self) -> None:
+        env = self.env.copy()
+        auth_counter = self.base / "auth-counter.txt"
+        invocation_log = self.base / "invocations.jsonl"
+        env["FAKE_CLAUDE_AUTH_COUNTER"] = str(auth_counter)
+        env["FAKE_CLAUDE_AUTH_SWITCH_AFTER"] = "1"
+        env["FAKE_CLAUDE_INVOCATION_LOG"] = str(invocation_log)
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["billing_mode"], "subscription_required")
+        self.assertIn("subscription-only policy", payload["error"])
+        self.assertEqual(auth_counter.read_text(encoding="utf-8"), "2")
+        self.assertFalse(invocation_log.exists())
+        messages = self.db.read_text(encoding="utf-8")
+        self.assertIn("delegate_request", messages)
+        self.assertIn("delegate_response", messages)
+
+    def test_postflight_auth_change_discards_inference_result(self) -> None:
+        env = self.env.copy()
+        auth_counter = self.base / "auth-counter.txt"
+        invocation_log = self.base / "invocations.jsonl"
+        env["FAKE_CLAUDE_AUTH_COUNTER"] = str(auth_counter)
+        env["FAKE_CLAUDE_AUTH_SWITCH_AFTER"] = "2"
+        env["FAKE_CLAUDE_INVOCATION_LOG"] = str(invocation_log)
+        result, payload = self.run_json(self.command("--timeout", "5"), env)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["billing_mode"], "subscription")
+        self.assertEqual(payload["auth_method"], "claude.ai")
+        self.assertEqual(payload["api_provider"], "firstParty")
+        self.assertIn("subscription-only policy", payload["error"])
+        self.assertNotIn("result", payload)
+        self.assertEqual(auth_counter.read_text(encoding="utf-8"), "3")
+        self.assertTrue(invocation_log.exists())
 
 
 if __name__ == "__main__":

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Delegate bounded advisory work to Claude through agmsg.
+"""Delegate bounded review or implementation work to Claude through agmsg.
 
-The wrapper owns all agmsg I/O. Claude receives no tools and cannot edit files or
-inspect local state. Long calls continue in a detached worker and can be collected
-later by job ID.
+The wrapper owns all agmsg I/O. Advisory jobs may read the current project directory
+with a narrow file-tool allowlist but cannot edit files or run commands. Explicit
+Sonnet implementation jobs may inspect and edit that worktree and must be reviewed
+by Codex. Long calls continue in a detached worker and can be collected later by
+job ID. Claude is invoked only when Claude Code proves that the active credential
+is a paid Claude.ai subscription; API-key and cloud-provider routes fail closed
+before inference.
 """
 
 from __future__ import annotations
@@ -29,6 +33,41 @@ SENSITIVE_PATTERNS = [
     re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 ]
+PAID_SUBSCRIPTION_TYPES = {"pro", "max", "team", "enterprise"}
+WORKSPACE_READ_TOOLS = ["Read", "Glob", "Grep"]
+WORKSPACE_WRITE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"]
+SAFE_CLAUDE_ENV_NAMES = {
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "NO_COLOR",
+    "PATH",
+    "SHELL",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+    "TEMP",
+    "TERM",
+    "TMP",
+    "TMPDIR",
+    "USER",
+}
+FORBIDDEN_AUTH_ENV_NAMES = {
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_CUSTOM_HEADERS",
+    "AWS_BEARER_TOKEN_BEDROCK",
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+    "CLAUDE_CODE_SKIP_FOUNDRY_AUTH",
+    "CLAUDE_CODE_SKIP_MANTLE_AUTH",
+    "CLAUDE_CODE_SKIP_VERTEX_AUTH",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_MANTLE",
+    "CLAUDE_CODE_USE_VERTEX",
+}
 
 
 class DelegateError(RuntimeError):
@@ -93,6 +132,37 @@ def validate_route_id(label: str, value: str) -> None:
         )
 
 
+def require_git_worktree(project: Path) -> Path:
+    if not project.is_dir():
+        raise DelegateError(f"project directory does not exist: {project}")
+    result = run_checked(
+        ["git", "-C", str(project), "rev-parse", "--show-toplevel"],
+        timeout=15,
+    )
+    root = Path(result.stdout.strip()).expanduser().resolve()
+    try:
+        project.relative_to(root)
+    except ValueError as exc:
+        raise DelegateError("workspace-write project must be inside its Git worktree") from exc
+    return root
+
+
+def execution_policy(workspace_write: bool) -> dict[str, Any]:
+    if workspace_write:
+        return {
+            "execution_mode": "workspace_write",
+            "tools": list(WORKSPACE_WRITE_TOOLS),
+            "permission_mode": "acceptEdits",
+            "review_required": True,
+        }
+    return {
+        "execution_mode": "workspace_read",
+        "tools": list(WORKSPACE_READ_TOOLS),
+        "permission_mode": "plan",
+        "review_required": False,
+    }
+
+
 def make_job_id(model: str) -> str:
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"cad-{model}-{stamp}-{secrets.token_hex(3)}"
@@ -109,12 +179,108 @@ def required_script(agmsg_dir: Path, name: str) -> Path:
     return path
 
 
-def run_checked(args: list[str], *, timeout: float = 30, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(args, text=True, capture_output=True, timeout=timeout, env=env)
+def run_checked(
+    args: list[str],
+    *,
+    timeout: float = 30,
+    env: dict[str, str] | None = None,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(args, text=True, capture_output=True, timeout=timeout, env=env, cwd=cwd)
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
         raise DelegateError(f"command failed: {Path(args[0]).name}: {redact(detail)}")
     return result
+
+
+def is_forbidden_auth_env(name: str) -> bool:
+    if name in FORBIDDEN_AUTH_ENV_NAMES:
+        return True
+    return name.startswith("ANTHROPIC_") and (
+        name.endswith("_API_KEY")
+        or name.endswith("_AUTH_TOKEN")
+        or name.endswith("_BASE_URL")
+    )
+
+
+def subscription_env(source: dict[str, str] | None = None) -> dict[str, str]:
+    source_env = dict(os.environ if source is None else source)
+    blocked = sorted(
+        name for name, value in source_env.items() if value and is_forbidden_auth_env(name)
+    )
+    if blocked:
+        raise DelegateError(
+            "subscription-only policy blocked credential or provider environment variable(s): "
+            + ", ".join(blocked)
+            + "; unset them and authenticate with `claude auth login`"
+        )
+    # Pass only environment variables Claude needs for local execution. This
+    # prevents a future, not-yet-known provider selector from silently reaching
+    # the CLI. Tests get a narrow FAKE_* passthrough that cannot carry auth keys.
+    env = {
+        name: value
+        for name, value in source_env.items()
+        if name in SAFE_CLAUDE_ENV_NAMES or name.startswith("LC_")
+    }
+    if source_env.get("CLAUDE_AGMSG_DELEGATE_TESTING") == "1":
+        env.update(
+            (name, value)
+            for name, value in source_env.items()
+            if name.startswith("FAKE_")
+        )
+
+    # These are defense in depth, not substitutes for the auth-status check.
+    # DISABLE_EXTRA_USAGE_COMMAND removes the in-CLI enablement surface; an
+    # already enabled account-level usage-credit setting must be disabled in
+    # Claude Settings > Usage. The README keeps that proof boundary explicit.
+    env["DISABLE_EXTRA_USAGE_COMMAND"] = "1"
+    env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] = "1"
+    return env
+
+
+def verify_subscription_auth(claude_bin: str, project: Path) -> dict[str, str]:
+    env = subscription_env()
+    result = run_checked(
+        [
+            claude_bin,
+            "--safe-mode",
+            "--setting-sources",
+            "",
+            "auth",
+            "status",
+            "--json",
+        ],
+        timeout=15,
+        env=env,
+        cwd=project,
+    )
+    try:
+        status = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise DelegateError(f"Claude auth status returned invalid JSON: {exc}") from exc
+    if not isinstance(status, dict):
+        raise DelegateError("Claude auth status is not a JSON object")
+
+    logged_in = status.get("loggedIn") is True
+    auth_method = str(status.get("authMethod") or "")
+    api_provider = str(status.get("apiProvider") or "")
+    subscription_type = str(status.get("subscriptionType") or "").lower()
+    if not (
+        logged_in
+        and auth_method == "claude.ai"
+        and api_provider == "firstParty"
+        and subscription_type in PAID_SUBSCRIPTION_TYPES
+    ):
+        raise DelegateError(
+            "subscription-only policy requires loggedIn=true, authMethod=claude.ai, "
+            "apiProvider=firstParty, and a paid subscriptionType; Claude was not invoked"
+        )
+    return {
+        "billing_mode": "subscription",
+        "auth_method": auth_method,
+        "api_provider": api_provider,
+        "subscription_type": subscription_type,
+    }
 
 
 def infer_identity(project: Path, agmsg_dir: Path) -> tuple[str, str]:
@@ -144,7 +310,11 @@ def list_messages(agmsg_dir: Path, team: str, to_agent: str, since_id: int = 0) 
     output = run_checked([str(list_ids), team, to_agent, "--since-id", str(since_id)]).stdout
     messages: list[dict[str, Any]] = []
     for line in output.splitlines():
-        parts = line.split("\x1f", 2)
+        # sqlite3 3.50+ escapes ASCII control characters in CLI output by
+        # default, so char(31) may arrive as the printable two-byte sequence
+        # "^_". Older versions and fixtures return the raw unit separator.
+        separator = "\x1f" if "\x1f" in line else "^_"
+        parts = line.split(separator, 2)
         if len(parts) != 3 or not parts[0].isdigit():
             continue
         messages.append({"id": int(parts[0]), "from": parts[1], "body": parts[2]})
@@ -214,10 +384,18 @@ def public_state(state: dict[str, Any]) -> dict[str, Any]:
         "status": "running" if raw_status in {"queued", "running"} else raw_status,
         "requested_model": state.get("model"),
         "role": state.get("role"),
+        "execution_mode": response.get("execution_mode", state.get("execution_mode")),
+        "tools": response.get("tools", state.get("tools", [])),
+        "permission_mode": response.get("permission_mode", state.get("permission_mode")),
+        "review_required": response.get("review_required", state.get("review_required", False)),
+        "billing_mode": response.get("billing_mode", state.get("billing_mode")),
+        "auth_method": response.get("auth_method", state.get("auth_method")),
+        "api_provider": response.get("api_provider", state.get("api_provider")),
+        "subscription_type": response.get("subscription_type", state.get("subscription_type")),
         "created_at": state.get("created_at"),
         "updated_at": state.get("updated_at"),
     }
-    for key in ["actual_model", "result", "result_preview", "result_file", "elapsed_seconds", "cost_usd", "error"]:
+    for key in ["actual_model", "result", "result_preview", "result_file", "elapsed_seconds", "error"]:
         value = response.get(key, state.get(key))
         if value is not None:
             output[key] = value
@@ -241,16 +419,27 @@ def choose_actual_model(model_usage: Any, requested: str) -> str | None:
 def claude_prompt(state: dict[str, Any]) -> str:
     role = state["role"]
     task = state["request"]["task"]
+    if state.get("execution_mode") == "workspace_write":
+        return (
+            "You are Claude acting as a bounded implementation worker for Codex. "
+            "Inspect and edit the current Git workspace now using only the provided file tools. "
+            "Do not run shell commands, install dependencies, deploy, push, access unrelated paths, "
+            "or make the final decision. Keep edits scoped to the task. In the final response, list "
+            "the files changed, summarize the implementation, and suggest tests for Codex to run and review.\n\n"
+            f"Task retrieved from agmsg job {state['job_id']}:\n{task}"
+        )
     return (
         f"You are Claude acting as a bounded advisory {role} for Codex. "
-        "You have no tools and must not claim to inspect local state, edit files, run commands, deploy, push, install, or make the final decision. "
+        "Inspect the current project directory as needed using only Read, Glob, and Grep. "
+        "Do not access files outside this project directory or inspect credential, private-key, or environment-secret files. "
+        "Do not edit or write files, run commands, deploy, push, install, or make the final decision. "
         "Label assumptions and return only the requested deliverable.\n\n"
         f"Task retrieved from agmsg job {state['job_id']}:\n{task}"
     )
 
 
 def claude_command(state: dict[str, Any]) -> list[str]:
-    return [
+    command = [
         state["claude_bin"],
         claude_prompt(state),
         "-p",
@@ -259,13 +448,17 @@ def claude_command(state: dict[str, Any]) -> list[str]:
         "--effort",
         state["effort"],
         "--safe-mode",
-        "--max-budget-usd",
-        str(state["max_budget_usd"]),
+        "--setting-sources",
+        "",
         "--output-format",
         "json",
+        "--no-session-persistence",
         "--tools",
-        "",
+        ",".join(state.get("tools", [])),
     ]
+    if state.get("permission_mode"):
+        command.extend(["--permission-mode", state["permission_mode"]])
+    return command
 
 
 def worker_main(args: argparse.Namespace) -> int:
@@ -276,17 +469,31 @@ def worker_main(args: argparse.Namespace) -> int:
     state["updated_at"] = now_iso()
     write_json_atomic(state_path(state_dir, args.job_id), state)
     started = time.monotonic()
+    subscription_auth: dict[str, str] | None = None
     try:
+        subscription_auth = verify_subscription_auth(
+            state["claude_bin"], Path(state["project"])
+        )
         command = claude_command(state)
         result = subprocess.run(
             command,
             text=True,
             capture_output=True,
             timeout=float(state["ttl_seconds"]),
+            env=subscription_env(),
+            cwd=Path(state["project"]),
         )
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
             raise DelegateError(f"Claude failed: {redact(detail)}")
+        postflight_auth = verify_subscription_auth(
+            state["claude_bin"], Path(state["project"])
+        )
+        if postflight_auth != subscription_auth:
+            raise DelegateError(
+                "subscription-only policy detected an authentication change during inference; "
+                "the result was discarded"
+            )
         try:
             model_output = json.loads(result.stdout)
         except json.JSONDecodeError as exc:
@@ -303,8 +510,15 @@ def worker_main(args: argparse.Namespace) -> int:
             "requested_model": state["model"],
             "actual_model": actual_model,
             "role": state["role"],
+            "execution_mode": state["execution_mode"],
+            "tools": state["tools"],
+            "permission_mode": state["permission_mode"],
+            "review_required": state["review_required"],
+            "billing_mode": subscription_auth["billing_mode"],
+            "auth_method": subscription_auth["auth_method"],
+            "api_provider": subscription_auth["api_provider"],
+            "subscription_type": subscription_auth["subscription_type"],
             "elapsed_seconds": round(time.monotonic() - started, 3),
-            "cost_usd": model_output.get("total_cost_usd"),
         }
         if len(text_result) <= int(state["max_message_chars"]):
             response["result"] = text_result
@@ -348,9 +562,22 @@ def worker_main(args: argparse.Namespace) -> int:
         "status": "failed",
         "requested_model": state["model"],
         "role": state["role"],
+        "execution_mode": state["execution_mode"],
+        "tools": state["tools"],
+        "permission_mode": state["permission_mode"],
+        "review_required": state["review_required"],
+        "billing_mode": (
+            subscription_auth["billing_mode"]
+            if subscription_auth is not None
+            else "subscription_required"
+        ),
         "error": error,
         "elapsed_seconds": round(time.monotonic() - started, 3),
     }
+    if subscription_auth is not None:
+        response["auth_method"] = subscription_auth["auth_method"]
+        response["api_provider"] = subscription_auth["api_provider"]
+        response["subscription_type"] = subscription_auth["subscription_type"]
     try:
         send_message(
             Path(state["agmsg_dir"]),
@@ -410,30 +637,50 @@ def run_main(args: argparse.Namespace) -> int:
     agmsg_dir = Path(args.agmsg_dir).expanduser().resolve()
     state_dir = Path(args.state_dir).expanduser().resolve()
 
+    if args.timeout < 0:
+        raise DelegateError("timeout must be zero or greater")
+    if args.ttl <= 0:
+        raise DelegateError("ttl must be greater than zero")
+    if args.max_task_chars <= 0 or args.max_message_chars <= 0:
+        raise DelegateError("max_task_chars and max_message_chars must be greater than zero")
+    if not project.is_dir():
+        raise DelegateError(f"project directory does not exist: {project}")
+    if args.workspace_write and (model != "sonnet" or role != "implementer"):
+        raise DelegateError("--workspace-write requires --model sonnet and --role implementer")
+    if args.workspace_write:
+        require_git_worktree(project)
+    policy = execution_policy(args.workspace_write)
+    subscription_auth = verify_subscription_auth(args.claude_bin, project)
+
     team = args.team
     from_agent = args.from_agent
     if not team or not from_agent:
         inferred_team, inferred_agent = infer_identity(project, agmsg_dir)
         team = team or inferred_team
-        from_agent = from_agent or inferred_agent
+        if not from_agent:
+            from_agent = (
+                inferred_agent
+                if inferred_agent.endswith("-delegate")
+                else f"{inferred_agent}-delegate"
+            )
     to_agent = args.to_agent
     validate_route_id("team", team)
     validate_route_id("from_agent", from_agent)
     validate_route_id("to_agent", to_agent)
-    if args.timeout < 0:
-        raise DelegateError("timeout must be zero or greater")
-    if args.ttl <= 0:
-        raise DelegateError("ttl must be greater than zero")
-    if args.max_budget_usd <= 0:
-        raise DelegateError("max_budget_usd must be greater than zero")
-    if args.max_task_chars <= 0 or args.max_message_chars <= 0:
-        raise DelegateError("max_task_chars and max_message_chars must be greater than zero")
     request = {
         "type": "delegate_request",
         "job_id": job_id,
         "model": model,
         "role": role,
         "task": args.task,
+        "execution_mode": policy["execution_mode"],
+        "tools": policy["tools"],
+        "permission_mode": policy["permission_mode"],
+        "review_required": policy["review_required"],
+        "billing_mode": subscription_auth["billing_mode"],
+        "auth_method": subscription_auth["auth_method"],
+        "api_provider": subscription_auth["api_provider"],
+        "subscription_type": subscription_auth["subscription_type"],
         "requested_by": from_agent,
         "created_at": now_iso(),
     }
@@ -448,7 +695,17 @@ def run_main(args: argparse.Namespace) -> int:
                 "from_agent": from_agent,
                 "to_agent": to_agent,
                 "request": request,
-                "claude_policy": {"safe_mode": True, "tools": []},
+                "claude_policy": {
+                    "safe_mode": True,
+                    "execution_mode": policy["execution_mode"],
+                    "tools": policy["tools"],
+                    "permission_mode": policy["permission_mode"],
+                    "review_required": policy["review_required"],
+                    "subscription_only": True,
+                    "auth_method": subscription_auth["auth_method"],
+                    "api_provider": subscription_auth["api_provider"],
+                    "subscription_type": subscription_auth["subscription_type"],
+                },
             }
         )
 
@@ -466,6 +723,10 @@ def run_main(args: argparse.Namespace) -> int:
         "status": "queued",
         "model": model,
         "role": role,
+        "execution_mode": policy["execution_mode"],
+        "tools": policy["tools"],
+        "permission_mode": policy["permission_mode"],
+        "review_required": policy["review_required"],
         "team": team,
         "from_agent": from_agent,
         "to_agent": to_agent,
@@ -473,7 +734,10 @@ def run_main(args: argparse.Namespace) -> int:
         "agmsg_dir": str(agmsg_dir),
         "claude_bin": args.claude_bin,
         "effort": args.effort,
-        "max_budget_usd": args.max_budget_usd,
+        "billing_mode": subscription_auth["billing_mode"],
+        "auth_method": subscription_auth["auth_method"],
+        "api_provider": subscription_auth["api_provider"],
+        "subscription_type": subscription_auth["subscription_type"],
         "max_message_chars": args.max_message_chars,
         "ttl_seconds": args.ttl,
         "request_message_id": message_id,
@@ -529,16 +793,20 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--project", default=os.getcwd())
     run.add_argument("--team")
     run.add_argument("--from-agent")
-    run.add_argument("--to-agent", default="claude")
+    run.add_argument("--to-agent", default="claude-delegate")
     run.add_argument("--timeout", type=float, default=60.0)
     run.add_argument("--ttl", type=float, default=3600.0)
     run.add_argument("--effort", choices=["medium", "high", "max"], default="high")
-    run.add_argument("--max-budget-usd", type=float, default=1.0)
     run.add_argument("--max-task-chars", type=int, default=12000)
     run.add_argument("--max-message-chars", type=int, default=12000)
     run.add_argument("--agmsg-dir", default=str(default_agmsg_dir()))
     run.add_argument("--state-dir", default=str(default_state_dir()))
     run.add_argument("--claude-bin", default="claude")
+    run.add_argument(
+        "--workspace-write",
+        action="store_true",
+        help="Allow a Sonnet implementer to edit files in the current Git workspace; Codex review is required.",
+    )
     run.add_argument("--dry-run", action="store_true")
     run.set_defaults(func=run_main)
 
