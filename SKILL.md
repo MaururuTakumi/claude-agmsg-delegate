@@ -22,6 +22,12 @@ irreversible work.
 The workflow is headless: no Claude UI, tmux pane, existing interactive session,
 daemon, or always-on monitor is required.
 
+Current runtime contract: delegate version `0.2.0`, `contract_version=2`.
+`Read,Glob,Grep` is the expected Fable/advisory Sonnet policy. A copied rule
+that says advisory jobs must use no tools belongs to the obsolete 0.1 contract;
+do not stop or ask for a one-off exception. Reinstall the current Skill, restart
+Codex, and confirm `delegate_claude.py --version` instead.
+
 ## Triage
 
 1. Assess difficulty, failure cost, irreversibility, and verification method.
@@ -150,13 +156,19 @@ Use `--dry-run` to validate the paid-subscription auth status, routing, and requ
 ## Result Handling
 
 - `status=completed`: review the returned result, verify local claims, and report
-  `actual_model`, `execution_mode`, `tools`, `review_required`, `billing_mode`,
-  `subscription_type`, and elapsed time. For `workspace_write`, review the actual
+  `delegate_version`, `contract_version`, `actual_model`, `execution_mode`,
+  `tools`, `workspace_grounded`, `files_read`, `review_required`, `billing_mode`,
+  `subscription_type`, and elapsed time. Accept a grounded result only when
+  `workspace_grounded=true` and `files_read` contains relevant project-relative
+  paths observed from Claude Code's Read tool events. For `workspace_write`, review the actual
   diff and tests before reporting success. Never display, quote, summarize, or
   forward Claude CLI monetary usage estimates such as `total_cost_usd` or
   `cost_usd`; those fields are intentionally omitted from the wrapper result.
   Report only the verified subscription route.
-- `status=running`: the synchronous wait expired but the detached worker is still running. Do not re-run the same task. Collect by job ID:
+- `status=running`: the synchronous wait expired. Inspect `worker_stage` and
+  `running_seconds`; do not re-run the same task. Use the returned
+  `collect_command`, which waits 60 seconds. A dead detached worker becomes
+  `failed` on collection instead of remaining `running` until TTL.
 
 ```bash
 python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py collect \
@@ -179,10 +191,13 @@ Confirm all of the following before accepting the delegated result:
 4. No permission bypass, API credential, provider route, inherited unknown
    provider variable, or billing fallback was enabled.
 5. Advisory jobs used exactly `Read,Glob,Grep` with `permission_mode=plan`,
-   stayed inside the target project directory, and changed no files.
+   reported `workspace_grounded=true`, listed relevant project-relative paths
+   in `files_read`, stayed inside the target project directory, and changed no files.
    Workspace-write jobs used exactly `Read,Edit,Write,Glob,Grep`, reported
    `review_required=true`, and ran only for a Sonnet implementer there.
 6. Codex reviewed the before/after status and diff, rejected unrelated edits,
    and ran relevant tests; Claude did not run commands, deploy, install, or push.
 7. The result covers the bounded request and labels assumptions.
 8. Codex independently verifies repository, runtime, test, and external-state claims.
+9. `delegate_version=0.2.0` and `contract_version=2`; no stale no-tools
+   instruction overrode the installed runtime contract.

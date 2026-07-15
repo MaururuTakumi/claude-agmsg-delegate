@@ -36,6 +36,8 @@ SENSITIVE_PATTERNS = [
 PAID_SUBSCRIPTION_TYPES = {"pro", "max", "team", "enterprise"}
 WORKSPACE_READ_TOOLS = ["Read", "Glob", "Grep"]
 WORKSPACE_WRITE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"]
+DELEGATE_VERSION = "0.2.0"
+CONTRACT_VERSION = 2
 SAFE_CLAUDE_ENV_NAMES = {
     "HOME",
     "LANG",
@@ -448,6 +450,8 @@ def public_state(state: dict[str, Any]) -> dict[str, Any]:
     output: dict[str, Any] = {
         "job_id": state.get("job_id"),
         "status": "running" if raw_status in {"queued", "running"} else raw_status,
+        "delegate_version": response.get("delegate_version", state.get("delegate_version")),
+        "contract_version": response.get("contract_version", state.get("contract_version")),
         "requested_model": state.get("model"),
         "role": state.get("role"),
         "execution_mode": response.get("execution_mode", state.get("execution_mode")),
@@ -461,12 +465,26 @@ def public_state(state: dict[str, Any]) -> dict[str, Any]:
         "created_at": state.get("created_at"),
         "updated_at": state.get("updated_at"),
     }
-    for key in ["actual_model", "result", "result_preview", "result_file", "elapsed_seconds", "error"]:
+    for key in [
+        "actual_model",
+        "result",
+        "result_preview",
+        "result_file",
+        "elapsed_seconds",
+        "error",
+        "workspace_grounded",
+        "files_read",
+        "worker_stage",
+    ]:
         value = response.get(key, state.get(key))
         if value is not None:
             output[key] = value
+    if raw_status in {"queued", "running"}:
+        output["running_seconds"] = round(
+            max(0.0, now_epoch() - float(state.get("created_epoch") or now_epoch())), 3
+        )
     output["collect_command"] = (
-        f"python3 {Path(__file__).resolve()} collect --job-id {state.get('job_id')}"
+        f"python3 {Path(__file__).resolve()} collect --job-id {state.get('job_id')} --wait 60"
     )
     return output
 
@@ -489,17 +507,23 @@ def claude_prompt(state: dict[str, Any]) -> str:
         return (
             "You are Claude acting as a bounded implementation worker for Codex. "
             "Inspect and edit the current Git workspace now using only the provided file tools. "
+            "Before answering, you MUST use Read on at least one relevant existing project file; "
+            "do not rely only on the task summary. "
             "Do not run shell commands, install dependencies, deploy, push, access unrelated paths, "
             "or make the final decision. Keep edits scoped to the task. In the final response, list "
-            "the files changed, summarize the implementation, and suggest tests for Codex to run and review.\n\n"
+            "the files read and changed using project-relative paths, summarize the implementation, "
+            "and suggest tests for Codex to run and review.\n\n"
             f"Task retrieved from agmsg job {state['job_id']}:\n{task}"
         )
     return (
         f"You are Claude acting as a bounded advisory {role} for Codex. "
-        "Inspect the current project directory as needed using only Read, Glob, and Grep. "
+        "Inspect the current project directory using only Read, Glob, and Grep. Before answering, "
+        "you MUST use Read on at least one relevant existing project file; do not rely only on the "
+        "task summary. "
         "Do not access files outside this project directory or inspect credential, private-key, or environment-secret files. "
         "Do not edit or write files, run commands, deploy, push, install, or make the final decision. "
-        "Label assumptions and return only the requested deliverable.\n\n"
+        "Label assumptions, list the files inspected using project-relative paths, and return the "
+        "requested deliverable.\n\n"
         f"Task retrieved from agmsg job {state['job_id']}:\n{task}"
     )
 
@@ -517,7 +541,8 @@ def claude_command(state: dict[str, Any]) -> list[str]:
         "--setting-sources",
         "",
         "--output-format",
-        "json",
+        "stream-json",
+        "--verbose",
         "--no-session-persistence",
         "--tools",
         ",".join(state.get("tools", [])),
@@ -527,19 +552,96 @@ def claude_command(state: dict[str, Any]) -> list[str]:
     return command
 
 
+def parse_claude_stream(stdout: str, project: Path) -> tuple[dict[str, Any], list[str]]:
+    """Parse Claude Code JSONL and return its result plus observed Read evidence."""
+    result_event: dict[str, Any] | None = None
+    read_calls: dict[str, str] = {}
+    failed_tool_ids: set[str] = set()
+
+    for line_number, line in enumerate(stdout.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise DelegateError(
+                f"Claude stream-json returned invalid JSONL on line {line_number}: {exc}"
+            ) from exc
+        if not isinstance(event, dict):
+            raise DelegateError(f"Claude stream-json line {line_number} is not an object")
+
+        if event.get("type") == "result":
+            result_event = event
+
+        message = event.get("message")
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and block.get("name") == "Read":
+                tool_id = str(block.get("id") or f"line-{line_number}")
+                tool_input = block.get("input")
+                if not isinstance(tool_input, dict):
+                    continue
+                path_value = tool_input.get("file_path") or tool_input.get("path")
+                if isinstance(path_value, str) and path_value.strip():
+                    read_calls[tool_id] = path_value
+            if block.get("type") == "tool_result" and block.get("is_error") is True:
+                failed_tool_ids.add(str(block.get("tool_use_id") or ""))
+
+    if result_event is None:
+        raise DelegateError("Claude stream-json did not contain a final result event")
+
+    project = project.expanduser().resolve()
+    files_read: list[str] = []
+    for tool_id, raw_path in read_calls.items():
+        if tool_id in failed_tool_ids:
+            continue
+        candidate = Path(raw_path).expanduser()
+        if not candidate.is_absolute():
+            candidate = project / candidate
+        resolved = candidate.resolve()
+        try:
+            relative = resolved.relative_to(project)
+        except ValueError as exc:
+            raise DelegateError(
+                "Claude Read accessed a path outside the selected project; the result was discarded"
+            ) from exc
+        relative_text = relative.as_posix()
+        if relative_text not in files_read:
+            files_read.append(relative_text)
+
+    if not files_read:
+        raise DelegateError(
+            "workspace grounding is required, but no successful Read tool call was observed; "
+            "the result was discarded"
+        )
+    return result_event, files_read
+
+
+def update_worker_stage(state_dir: Path, state: dict[str, Any], stage: str) -> None:
+    state["worker_stage"] = stage
+    state["updated_at"] = now_iso()
+    write_json_atomic(state_path(state_dir, str(state["job_id"])), state)
+
+
 def worker_main(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     state = read_state(state_dir, args.job_id)
     state["status"] = "running"
     state["worker_pid"] = os.getpid()
-    state["updated_at"] = now_iso()
-    write_json_atomic(state_path(state_dir, args.job_id), state)
+    update_worker_stage(state_dir, state, "auth_preflight")
     started = time.monotonic()
     subscription_auth: dict[str, str] | None = None
     try:
         subscription_auth = verify_subscription_auth(
             state["claude_bin"], Path(state["project"])
         )
+        update_worker_stage(state_dir, state, "claude_inference")
         command = claude_command(state)
         result = subprocess.run(
             command,
@@ -552,6 +654,7 @@ def worker_main(args: argparse.Namespace) -> int:
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
             raise DelegateError(f"Claude failed: {redact(detail)}")
+        update_worker_stage(state_dir, state, "auth_postflight")
         postflight_auth = verify_subscription_auth(
             state["claude_bin"], Path(state["project"])
         )
@@ -560,10 +663,9 @@ def worker_main(args: argparse.Namespace) -> int:
                 "subscription-only policy detected an authentication change during inference; "
                 "the result was discarded"
             )
-        try:
-            model_output = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise DelegateError(f"Claude returned invalid JSON: {exc}") from exc
+        model_output, files_read = parse_claude_stream(
+            result.stdout, Path(state["project"])
+        )
         text_result = model_output.get("result")
         if not isinstance(text_result, str) or not text_result.strip():
             raise DelegateError("Claude returned an empty result")
@@ -573,6 +675,8 @@ def worker_main(args: argparse.Namespace) -> int:
             "type": "delegate_response",
             "job_id": state["job_id"],
             "status": "completed",
+            "delegate_version": state["delegate_version"],
+            "contract_version": state["contract_version"],
             "requested_model": state["model"],
             "actual_model": actual_model,
             "role": state["role"],
@@ -584,6 +688,8 @@ def worker_main(args: argparse.Namespace) -> int:
             "auth_method": subscription_auth["auth_method"],
             "api_provider": subscription_auth["api_provider"],
             "subscription_type": subscription_auth["subscription_type"],
+            "workspace_grounded": True,
+            "files_read": files_read,
             "elapsed_seconds": round(time.monotonic() - started, 3),
         }
         if len(text_result) <= int(state["max_message_chars"]):
@@ -598,6 +704,7 @@ def worker_main(args: argparse.Namespace) -> int:
             response["result_preview"] = text_result[:500] + "..."
             response["result_file"] = str(result_file)
 
+        update_worker_stage(state_dir, state, "response_correlation")
         send_message(
             Path(state["agmsg_dir"]),
             state["team"],
@@ -613,6 +720,7 @@ def worker_main(args: argparse.Namespace) -> int:
             "delegate_response",
         )
         state["status"] = "completed"
+        state["worker_stage"] = "completed"
         state["response_message_id"] = message_id
         state["response"] = verified
         state["updated_at"] = now_iso()
@@ -627,6 +735,8 @@ def worker_main(args: argparse.Namespace) -> int:
         "type": "delegate_response",
         "job_id": state["job_id"],
         "status": "failed",
+        "delegate_version": state.get("delegate_version", DELEGATE_VERSION),
+        "contract_version": state.get("contract_version", CONTRACT_VERSION),
         "requested_model": state["model"],
         "role": state["role"],
         "execution_mode": state["execution_mode"],
@@ -656,6 +766,7 @@ def worker_main(args: argparse.Namespace) -> int:
     except Exception as send_exc:
         response["agmsg_error"] = redact(str(send_exc))
     state["status"] = "failed"
+    state["worker_stage"] = "failed"
     state["response"] = response
     state["updated_at"] = now_iso()
     write_json_atomic(state_path(state_dir, state["job_id"]), state)
@@ -686,7 +797,13 @@ def maybe_expire(state_dir: Path, state: dict[str, Any]) -> dict[str, Any]:
             alive = True
         except OSError:
             alive = False
-    if now_epoch() - created > ttl and not alive:
+    if state.get("status") == "running" and pid > 0 and not alive:
+        state["status"] = "failed"
+        state["worker_stage"] = "worker_exited"
+        state["error"] = "detached worker exited before writing a terminal result"
+        state["updated_at"] = now_iso()
+        write_json_atomic(state_path(state_dir, str(state["job_id"])), state)
+    elif now_epoch() - created > ttl and not alive:
         state["status"] = "expired"
         state["error"] = "job TTL expired without a live worker"
         state["updated_at"] = now_iso()
@@ -738,6 +855,8 @@ def run_main(args: argparse.Namespace) -> int:
     request = {
         "type": "delegate_request",
         "job_id": job_id,
+        "delegate_version": DELEGATE_VERSION,
+        "contract_version": CONTRACT_VERSION,
         "model": model,
         "role": role,
         "task": args.task,
@@ -759,6 +878,8 @@ def run_main(args: argparse.Namespace) -> int:
             {
                 "job_id": job_id,
                 "status": "dry_run",
+                "delegate_version": DELEGATE_VERSION,
+                "contract_version": CONTRACT_VERSION,
                 "team": team,
                 "from_agent": from_agent,
                 "to_agent": to_agent,
@@ -770,6 +891,7 @@ def run_main(args: argparse.Namespace) -> int:
                     "tools": policy["tools"],
                     "permission_mode": policy["permission_mode"],
                     "review_required": policy["review_required"],
+                    "workspace_grounding_required": True,
                     "subscription_only": True,
                     "auth_method": subscription_auth["auth_method"],
                     "api_provider": subscription_auth["api_provider"],
@@ -793,6 +915,9 @@ def run_main(args: argparse.Namespace) -> int:
     state: dict[str, Any] = {
         "job_id": job_id,
         "status": "queued",
+        "delegate_version": DELEGATE_VERSION,
+        "contract_version": CONTRACT_VERSION,
+        "worker_stage": "queued",
         "model": model,
         "role": role,
         "execution_mode": policy["execution_mode"],
@@ -843,6 +968,7 @@ def run_main(args: argparse.Namespace) -> int:
     stderr_log.close()
 
     final = wait_for_state(state_dir, job_id, args.timeout)
+    final = maybe_expire(state_dir, final)
     return emit(public_state(final), 0 if final.get("status") != "failed" else 1)
 
 
@@ -856,6 +982,7 @@ def collect_main(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--version", action="version", version=DELEGATE_VERSION)
     sub = parser.add_subparsers(dest="command", required=True)
 
     run = sub.add_parser("run", help="Send a request, launch Claude, and wait for a correlated response.")

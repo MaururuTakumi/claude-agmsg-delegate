@@ -15,12 +15,13 @@ AI install sequence:
 5. If agmsg is missing, stop and get explicit approval before `npx agmsg`, team join, or delivery-mode setup. After approval, use only `whoami.sh`, `join.sh`, and `delivery.sh` from the target project. With no existing team, propose `<target-project-name>-team / codex` and wait for confirmation. Offer only `1) turn` (recommended; Enter means turn) or `2) off`; never select `monitor` or `both`. Never silently create or edit agmsg files directly.
 6. If authorized: ./install.sh
 7. Restart Codex.
-8. Verify with delegate_claude.py run --model fable --task "Installation verification only." --dry-run
+8. Verify `delegate_claude.py --version` is `0.2.0`, then run delegate_claude.py run --model fable --task "Installation verification only." --dry-run and require `contract_version=2`.
 9. The dry-run may execute local read-only `claude auth status --json`, but must not send agmsg or invoke a model.
 
 Safety invariants:
 - Codex owns orchestration, diff review, commands, tests, integration, and final decisions.
 - Fable and advisory Sonnet may use only `Read,Glob,Grep` with `--permission-mode plan` in the target project directory. Explicit Sonnet implementer jobs require a Git worktree, may use only `Read,Edit,Write,Glob,Grep` with `--permission-mode acceptEdits`, and return `review_required=true`.
+- The obsolete 0.1 no-tools rule must not override runtime contract 2. Completed jobs require observed Read events, `workspace_grounded=true`, and project-relative `files_read`.
 - Codex reviews before/after status and diff and runs tests after every workspace-write job.
 - No Claude UI, tmux pane, existing session, daemon, or monitor is required.
 - Default agmsg mailboxes are `codex-delegate` and `claude-delegate`, isolated from visible Ghostty/Gdash loops.
@@ -36,7 +37,7 @@ Safety invariants:
 - No agmsg `monitor` or `both` mode for this Codex workflow.
 - No secrets or raw large logs.
 - job_id correlates every request and response.
-- timeout returns running; collect is idempotent.
+- timeout returns running with worker stage/elapsed evidence; collect is idempotent and detects dead workers.
 
 Primary files:
 - README.md: human install and usage guide

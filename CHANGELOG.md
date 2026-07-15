@@ -2,11 +2,24 @@
 
 ## Unreleased
 
+## 0.2.0 — 2026-07-15
+
+- Require and verify an observed Claude Code `Read` event before accepting a
+  delegated result; return project-relative `files_read` and
+  `workspace_grounded=true`.
+- Switch worker output to verbose `stream-json` so file-tool evidence can be
+  extracted without exposing raw transcripts or monetary metadata.
+- Add `delegate_version`, `contract_version`, `worker_stage`, running duration,
+  and immediate dead-worker detection on collection.
+- Make the installed version directly testable and copy `VERSION` into the
+  installed Skill.
+
 - Require a verified paid Claude.ai subscription before agmsg send and again immediately before inference.
 - Reject API-key, bearer-token, custom-base-URL, and cloud-provider billing routes with no fallback.
 - Remove dollar-budget and estimated-cost fields that could be mistaken for subscriber billing.
-- Explicitly forbid `api.sh` compatibility fallbacks and suppress Claude CLI
-  monetary usage estimates from user-facing output and stored responses.
+- Use official agmsg `api.sh` as the local read-only JSONL reader while
+  suppressing Claude CLI monetary usage estimates from user-facing output and
+  stored responses.
 - Allow Fable and advisory Sonnet to inspect the target project directory with
   `Read,Glob,Grep` under `--permission-mode plan`, while keeping edits and Bash
   disabled.
