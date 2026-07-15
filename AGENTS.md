@@ -19,7 +19,7 @@ Do these in order before proposing changes or installing anything:
 5. Before the final installed-Skill dry-run, change to the target project where
    delegation will actually be used. Do not join this temporary Skill clone to
    a team merely to make verification pass. Then verify that `whoami.sh`, `send.sh`,
-   and `list-ids.sh` exist and are executable under
+   and `api.sh` exist and are executable under
    `~/.agents/skills/agmsg/scripts/`.
 6. If any required agmsg script is missing, stop and ask for explicit approval
    before running `npx agmsg`. Explain that installation, team joining, and
@@ -30,8 +30,8 @@ Do these in order before proposing changes or installing anything:
    `<target-project-name>-team` and agent `codex`, display both values, and wait
    for confirmation before `join.sh`; never create them silently. If the target
    project is unknown, ask the user.
-   Never add or use an `api.sh` compatibility fallback in place of these
-   supported scripts.
+   `api.sh` is agmsg's official local, read-only JSONL interface. It reads the
+   local agmsg store and is not an Anthropic API or a metered model call.
 7. After joining, ask for delivery mode separately. Offer only `1) turn`
    (recommended; empty input or Enter selects it) and `2) off`. Wait for the
    answer, then use `delivery.sh`. Never select or recommend `monitor` or
@@ -69,8 +69,9 @@ do not invoke Fable or Sonnet during dependency installation or verification.
 - Do not pass secrets, tokens, credentials, private keys, personal data, or raw large logs.
 - Do not use `--dangerously-skip-permissions` or weaken `--safe-mode`.
 - Do not add API-key, bearer-token, custom-base-URL, API-key-helper, Bedrock, Vertex, Foundry, Mantle, or other pay-as-you-go fallback paths.
-- Do not bypass `delegate_claude.py` with `api.sh`, direct agmsg API calls, or
-  another compatibility route.
+- Do not bypass `delegate_claude.py` by invoking agmsg scripts directly. The
+  wrapper may use official agmsg `api.sh` only for local, read-only message
+  correlation; this is unrelated to Anthropic API billing.
 - Do not display, quote, summarize, or forward Claude CLI monetary usage
   estimates such as `total_cost_usd` or `cost_usd`. Report only the verified
   subscription route.
@@ -101,7 +102,9 @@ do not invoke Fable or Sonnet during dependency installation or verification.
 - agmsg team membership controls message routing, not filesystem scope. The
   selected project directory and Claude tool/permission policy control read
   access; workspace writes still require a Git worktree.
-- The Python wrapper owns all agmsg I/O through `whoami.sh`, `send.sh`, and `list-ids.sh`.
+- The Python wrapper owns all agmsg I/O through `whoami.sh`, `send.sh`, and the
+  official local read-only `api.sh`. Existing pre-release installations with
+  `list-ids.sh` remain supported, but a fresh install never requires that file.
 - Monetary usage metadata from Claude CLI is excluded from agmsg responses,
   saved public state, and terminal output.
 - Every request and response has one stable `job_id`.

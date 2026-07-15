@@ -52,10 +52,11 @@ daemon, or always-on monitor is required.
   `--safe-mode`; advisory jobs use only the read-only file-tool allowlist,
   while workspace-write jobs use only the write allowlist above.
 - Never add an API-key, bearer-token, custom-base-URL, Bedrock, Vertex, Foundry, Mantle, or API-key-helper fallback.
-- Never replace the supported wrapper path with `api.sh`, a direct agmsg API
-  call, or any compatibility fallback. If `whoami.sh`, `send.sh`, or
-  `list-ids.sh` is unavailable, stop and repair the supported installation
-  path after user approval.
+- Never bypass the wrapper by invoking agmsg scripts directly. The wrapper uses
+  official agmsg `api.sh` as a local, read-only JSONL message reader. It is not
+  an Anthropic API call, performs no model inference, and cannot create API
+  billing. If `whoami.sh`, `send.sh`, or `api.sh` is unavailable, stop and
+  update the official agmsg installation after user approval.
 - Before agmsg send and again immediately before inference, require Claude auth status to report `loggedIn=true`, `authMethod=claude.ai`, `apiProvider=firstParty`, and a paid `subscriptionType`.
 - Keep Claude's process environment on the wrapper's minimal allowlist and keep `--setting-sources ""` paired with `--safe-mode`; do not restore inherited provider variables or user/project/local settings.
 - Recheck subscription auth after inference and discard the result if it changed.
@@ -69,7 +70,7 @@ daemon, or always-on monitor is required.
 
 Before the final installed-Skill dry-run, verify that these agmsg scripts exist
 and are executable under `~/.agents/skills/agmsg/scripts/`: `whoami.sh`,
-`send.sh`, and `list-ids.sh`.
+`send.sh`, and `api.sh`.
 
 If any script is missing:
 
@@ -103,7 +104,10 @@ Use this approval prompt or an equivalent localized version:
 
 ## Run
 
-The wrapper uses only agmsg `send.sh`, `list-ids.sh`, and `whoami.sh`; it never reads the agmsg DB or team files directly.
+The wrapper uses agmsg `send.sh`, `whoami.sh`, and the official local read-only
+`api.sh`; it never reads the agmsg DB or team files directly. Legacy
+installations that already contain `list-ids.sh` are also accepted, but that
+non-public file is never required from a fresh installation.
 
 ```bash
 python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py run \

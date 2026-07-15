@@ -1,25 +1,25 @@
 {
   "summary": {
-    "score": 36,
-    "max_score": 98,
-    "rate": 0.3673469387755102,
-    "cases": 9,
+    "score": 43,
+    "max_score": 117,
+    "rate": 0.36752136752136755,
+    "cases": 10,
     "passed_cases": 0,
     "by_split": {
       "train": {
-        "score": 9,
-        "max_score": 43,
+        "score": 10,
+        "max_score": 47,
         "cases": 4,
         "passed_cases": 0,
-        "rate": 0.20930232558139536,
+        "rate": 0.2127659574468085,
         "case_pass_rate": 0.0
       },
       "validation": {
-        "score": 27,
-        "max_score": 55,
-        "cases": 5,
+        "score": 33,
+        "max_score": 70,
+        "cases": 6,
         "passed_cases": 0,
-        "rate": 0.4909090909090909,
+        "rate": 0.4714285714285714,
         "case_pass_rate": 0.0
       }
     }
@@ -100,8 +100,8 @@
     {
       "id": "security-boundary",
       "split": "train",
-      "score": 5,
-      "max_score": 24,
+      "score": 6,
+      "max_score": 28,
       "passed": false,
       "checks": [
         {
@@ -169,6 +169,18 @@
           "passed": false
         },
         {
+          "name": "required_term:read-only",
+          "passed": false
+        },
+        {
+          "name": "required_term:JSONL",
+          "passed": false
+        },
+        {
+          "name": "required_term:not an Anthropic API",
+          "passed": false
+        },
+        {
           "name": "forbidden_term:permission bypass is required",
           "passed": true
         },
@@ -190,6 +202,10 @@
         },
         {
           "name": "forbidden_term:Fable cannot read files",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:list-ids.sh is required",
           "passed": true
         },
         {
@@ -398,8 +414,8 @@
     {
       "id": "validation-monetary-output",
       "split": "validation",
-      "score": 6,
-      "max_score": 9,
+      "score": 7,
+      "max_score": 10,
       "passed": false,
       "checks": [
         {
@@ -415,7 +431,15 @@
           "passed": true
         },
         {
-          "name": "required_term:stop",
+          "name": "required_term:local",
+          "passed": true
+        },
+        {
+          "name": "required_term:read-only",
+          "passed": false
+        },
+        {
+          "name": "required_term:not an Anthropic API",
           "passed": false
         },
         {
@@ -423,23 +447,85 @@
           "passed": true
         },
         {
-          "name": "forbidden_term:add an api.sh compatibility fallback",
+          "name": "forbidden_term:forward the dollar value",
           "passed": true
         },
         {
-          "name": "forbidden_term:forward the dollar value",
+          "name": "forbidden_term:api.sh causes model billing",
           "passed": true
         },
         {
           "name": "required_regex:(?i)(never|must not|do not).*(display|quote|forward).*(total_cost_usd|cost|monetary|estimate)",
           "passed": false
-        },
-        {
-          "name": "required_regex:(?i)(never|must not|do not).*(api\\.sh|compatibility fallback)",
-          "passed": false
         }
       ],
       "output_path": "evals/oss-readiness/runs/baseline/validation-monetary-output.md"
+    },
+    {
+      "id": "validation-official-agmsg-compatibility",
+      "split": "validation",
+      "score": 5,
+      "max_score": 14,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:whoami.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:send.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:api.sh",
+          "passed": false
+        },
+        {
+          "name": "required_term:read-only",
+          "passed": false
+        },
+        {
+          "name": "required_term:JSONL",
+          "passed": false
+        },
+        {
+          "name": "required_term:no network",
+          "passed": false
+        },
+        {
+          "name": "required_term:not an Anthropic API",
+          "passed": false
+        },
+        {
+          "name": "required_term:job_id",
+          "passed": false
+        },
+        {
+          "name": "required_term:dry-run",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:list-ids.sh is required",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:compatible fork",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:pin a custom agmsg",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:download list-ids.sh",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(fresh|official).*(work|supported|compatible)",
+          "passed": false
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/baseline/validation-official-agmsg-compatibility.md"
     },
     {
       "id": "validation-workspace-read",
