@@ -1,0 +1,1 @@
+Give your agent https://github.com/MaururuTakumi/claude-agmsg-delegate and ask it to clone the repository, read AGENTS.md, run make test and ./install.sh --dry-run, then install only if they pass. Finish with a delegate_claude.py dry-run; installation must remain model-call-free and credit-free.

@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible wrapper, installer, or routing problem.
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, private agmsg messages, databases, or unredacted local paths.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include redacted commands and fixture-safe output.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: live-model
+    attributes:
+      label: Did this invoke a live paid model?
+      options:
+        - "No"
+        - "Yes — Fable"
+        - "Yes — Sonnet"
+    validations:
+      required: true

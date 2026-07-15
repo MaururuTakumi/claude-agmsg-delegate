@@ -1,0 +1,1 @@
+When the wait ends with status: running, keep the returned job_id and use collect. Collection is idempotent. Do not launch a duplicate paid job; the detached worker is still processing the original request.

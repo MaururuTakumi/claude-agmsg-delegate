@@ -1,0 +1,35 @@
+# claude-agmsg-delegate
+
+Purpose: Codex Skill for bounded advisory delegation to Claude Fable or Sonnet through agmsg.
+
+Repository: https://github.com/MaururuTakumi/claude-agmsg-delegate
+License: MIT
+Runtime dependencies: Python 3.10+, Codex, Claude Code, agmsg
+Python package dependencies: none
+
+AI install sequence:
+1. Read AGENTS.md, README.md, SKILL.md.
+2. Run: make test
+3. Run: ./install.sh --dry-run
+4. If authorized: ./install.sh
+5. Restart Codex.
+6. Verify with delegate_claude.py run --model fable --task "Installation verification only." --dry-run
+7. Do not invoke a paid model during install or verification.
+
+Safety invariants:
+- Codex owns local state, edits, commands, tests, and final decisions.
+- Claude has no tools and runs in safe mode.
+- No permission bypass.
+- No direct agmsg DB/team/config access.
+- No automatic role/hook changes.
+- No secrets or raw large logs.
+- job_id correlates every request and response.
+- timeout returns running; collect is idempotent.
+
+Primary files:
+- README.md: human install and usage guide
+- AGENTS.md: mandatory coding-agent instructions
+- SKILL.md: Codex Skill behavior
+- scripts/delegate_claude.py: deterministic wrapper
+- tests/test_delegate_claude.py: no-network fixture E2E
+- install.sh: non-destructive installer with dry-run and backups

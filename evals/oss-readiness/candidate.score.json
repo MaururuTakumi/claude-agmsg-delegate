@@ -1,0 +1,219 @@
+{
+  "summary": {
+    "score": 35,
+    "max_score": 35,
+    "rate": 1.0,
+    "cases": 5,
+    "passed_cases": 5,
+    "by_split": {
+      "train": {
+        "score": 26,
+        "max_score": 26,
+        "cases": 4,
+        "passed_cases": 4,
+        "rate": 1.0,
+        "case_pass_rate": 1.0
+      },
+      "validation": {
+        "score": 9,
+        "max_score": 9,
+        "cases": 1,
+        "passed_cases": 1,
+        "rate": 1.0,
+        "case_pass_rate": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "ai-clone-install",
+      "split": "train",
+      "score": 7,
+      "max_score": 7,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:AGENTS.md",
+          "passed": true
+        },
+        {
+          "name": "required_term:make test",
+          "passed": true
+        },
+        {
+          "name": "required_term:./install.sh --dry-run",
+          "passed": true
+        },
+        {
+          "name": "required_term:dry-run",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:invoke Claude during installation",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:skip tests",
+          "passed": true
+        },
+        {
+          "name": "required_regex:https://github.com/MaururuTakumi/claude-agmsg-delegate",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/ai-clone-install.md"
+    },
+    {
+      "id": "manual-install",
+      "split": "train",
+      "score": 6,
+      "max_score": 6,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:Python 3.10+",
+          "passed": true
+        },
+        {
+          "name": "required_term:npx agmsg",
+          "passed": true
+        },
+        {
+          "name": "required_term:git clone",
+          "passed": true
+        },
+        {
+          "name": "required_term:./install.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:restart Codex",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:pip install",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/manual-install.md"
+    },
+    {
+      "id": "security-boundary",
+      "split": "train",
+      "score": 7,
+      "max_score": 7,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:--safe-mode",
+          "passed": true
+        },
+        {
+          "name": "required_term:--tools \"\"",
+          "passed": true
+        },
+        {
+          "name": "required_term:secret",
+          "passed": true
+        },
+        {
+          "name": "required_term:--max-budget-usd",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:permission bypass is required",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:direct SQLite",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)Codex.*(final|最終)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/security-boundary.md"
+    },
+    {
+      "id": "timeout-collection",
+      "split": "train",
+      "score": 6,
+      "max_score": 6,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:status: running",
+          "passed": true
+        },
+        {
+          "name": "required_term:collect",
+          "passed": true
+        },
+        {
+          "name": "required_term:job_id",
+          "passed": true
+        },
+        {
+          "name": "required_term:Do not",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:submit the same task again",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(idempotent|冪等)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/timeout-collection.md"
+    },
+    {
+      "id": "validation-x-launch",
+      "split": "validation",
+      "score": 9,
+      "max_score": 9,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:https://github.com/MaururuTakumi/claude-agmsg-delegate",
+          "passed": true
+        },
+        {
+          "name": "required_term:clone",
+          "passed": true
+        },
+        {
+          "name": "required_term:AGENTS.md",
+          "passed": true
+        },
+        {
+          "name": "required_term:Fable",
+          "passed": true
+        },
+        {
+          "name": "required_term:Sonnet",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:revolutionary",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:game-changing",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:今すぐ拡散",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(インストール|install)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/validation-x-launch.md"
+    }
+  ]
+}

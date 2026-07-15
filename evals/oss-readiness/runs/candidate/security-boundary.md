@@ -1,0 +1,1 @@
+Delegated Claude uses --safe-mode and --tools "". Secret-like tasks are rejected before send, and --max-budget-usd caps a call. Codex remains the editor, verifier, and final decision-maker; the wrapper uses supported agmsg scripts rather than database access.

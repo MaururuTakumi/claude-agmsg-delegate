@@ -1,0 +1,6 @@
+{
+  "target": ".",
+  "template": "generic",
+  "created_at": "20260715-161537",
+  "acceptance_rule": "Accept only if candidate validation score is strictly higher than baseline."
+}
