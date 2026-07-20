@@ -32,7 +32,7 @@ If agmsg is missing or outdated, stop and ask me for explicit approval before ru
 After I approve, install agmsg and change to the target project where delegation will be used. If no teams exist, propose <target-project-name>-team and codex, show both, and wait for my confirmation before join.sh. Ask for delivery separately: recommend 1) turn, allow 2) off, and never choose monitor or both. Empty input or Enter means turn. Use only the provided whoami.sh, join.sh, and delivery.sh procedures. Do not join the temporary Skill clone just to pass verification. Then resume the final dry-run from the target project without invoking a Claude model.
 If the checks pass, install the Skill for my current Codex user.
 Do not run a Claude model or spend model usage during installation.
-Verify delegate_claude.py --version is 0.2.0.
+Verify delegate_claude.py --version is 0.2.1.
 Verify the installation with delegate_claude.py --dry-run; this may run the local read-only `claude auth status --json` check, but must not send an agmsg job or run model inference.
 Report the resolved route, subscription-only policy, execution mode, tool allowlist, and review requirement. Never display or forward Claude CLI monetary usage estimates.
 ```
@@ -102,7 +102,8 @@ agent must display those proposed values and wait for confirmation. After join,
 choose `1` or press Enter for the recommended `turn` delivery mode; choose `2`
 only for manual `off` delivery. Do not choose `monitor` or `both` for Codex.
 
-Restart Codex so it discovers the new Skill.
+Restart Codex and start a new task so it discovers the new Skill instead of
+keeping pre-update instructions cached in the current task.
 
 ## Use it from Codex
 
@@ -168,7 +169,7 @@ Sonnet workspace implementation adds `--tools "Read,Edit,Write,Glob,Grep"
 --permission-mode acceptEdits`. Neither mode enables Bash or a permission
 bypass.
 
-Version `0.2.0` uses runtime `contract_version=2`. It requires at least one
+Version `0.2.1` uses runtime `contract_version=2`. It requires at least one
 observed `Read` tool event before accepting a Fable or Sonnet result. The wrapper
 returns `workspace_grounded=true` and project-relative `files_read`; a missing
 Read event or an observed path outside the selected project discards the result.
@@ -240,7 +241,7 @@ Completed result:
 {
   "job_id": "cad-sonnet-20260715T024848Z-a1b2c3",
   "status": "completed",
-  "delegate_version": "0.2.0",
+  "delegate_version": "0.2.1",
   "contract_version": 2,
   "requested_model": "sonnet",
   "actual_model": "claude-sonnet-5",
@@ -335,7 +336,8 @@ Do not delegate secrets, credentials, private keys, unnecessary personal data, o
 
 ## Updating
 
-Pull the repository, rerun tests, then install with backup:
+Pull the repository, rerun tests, then install with a backup outside the Skill
+discovery directory:
 
 ```bash
 git pull --ff-only
@@ -345,9 +347,34 @@ make test
 python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
 ```
 
-`--force` moves the previous installed Skill to a timestamped backup instead of deleting it.
+`--force` moves the previous installed Skill under
+`~/.codex/skill-backups/claude-agmsg-delegate/` instead of deleting it. During
+the same update, installer-created
+`~/.codex/skills/claude-agmsg-delegate.backup-*` directories from older
+versions are moved intact to that backup root. Nothing is overwritten; a
+numeric suffix resolves collisions.
+
+If another directory under `~/.codex/skills/` still declares
+`name: claude-agmsg-delegate`, the installer lists every conflicting path and
+version, preserves them, and exits with status 4. Move only the unwanted copy
+outside `skills/`, rerun the installer, then restart Codex and start a new task.
 
 ## Troubleshooting
+
+### Codex still uses a stale Skill after updating
+
+Run the forced update again:
+
+```bash
+./install.sh --dry-run --force
+./install.sh --force
+python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
+```
+
+The installer migrates its old `claude-agmsg-delegate.backup-*` directories
+outside `skills/` and stops if an unrelated same-name copy remains. The expected
+version is `0.2.1`. Restart Codex and start a new task; an already-running task
+may retain the Skill instructions it loaded before the update.
 
 ### `subscription-only policy blocked ...`
 
@@ -425,7 +452,7 @@ exception. Update and reinstall the Skill, restart Codex, then verify:
 python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
 ```
 
-The expected version is `0.2.0`; dry-run reports `contract_version: 2`. A real
+The expected version is `0.2.1`; dry-run reports `contract_version: 2`. A real
 completed job must also report `workspace_grounded: true` and non-empty
 project-relative `files_read`. A dry-run alone never proves that files were read.
 

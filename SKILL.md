@@ -22,7 +22,7 @@ irreversible work.
 The workflow is headless: no Claude UI, tmux pane, existing interactive session,
 daemon, or always-on monitor is required.
 
-Current runtime contract: delegate version `0.2.0`, `contract_version=2`.
+Current runtime contract: delegate version `0.2.1`, `contract_version=2`.
 `Read,Glob,Grep` is the expected Fable/advisory Sonnet policy. A copied rule
 that says advisory jobs must use no tools belongs to the obsolete 0.1 contract;
 do not stop or ask for a one-off exception. Reinstall the current Skill, restart
@@ -54,6 +54,9 @@ Codex, and confirm `delegate_claude.py --version` instead.
 - Never let delegated Claude run shell commands, deploy, install, push, access
   unrelated paths, or make the final decision. Codex performs commands and tests.
 - Do not update agmsg, join/reset roles, or change delivery hooks without separate user approval.
+- When updating this Skill, keep backups outside the Codex Skill discovery
+  directory. After installation, restart Codex and start a new task so cached
+  pre-update instructions cannot remain active.
 - Do not use `--dangerously-skip-permissions`. The wrapper always uses
   `--safe-mode`; advisory jobs use only the read-only file-tool allowlist,
   while workspace-write jobs use only the write allowlist above.
@@ -199,5 +202,5 @@ Confirm all of the following before accepting the delegated result:
    and ran relevant tests; Claude did not run commands, deploy, install, or push.
 7. The result covers the bounded request and labels assumptions.
 8. Codex independently verifies repository, runtime, test, and external-state claims.
-9. `delegate_version=0.2.0` and `contract_version=2`; no stale no-tools
+9. `delegate_version=0.2.1` and `contract_version=2`; no stale no-tools
    instruction overrode the installed runtime contract.

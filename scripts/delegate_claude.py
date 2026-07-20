@@ -36,7 +36,7 @@ SENSITIVE_PATTERNS = [
 PAID_SUBSCRIPTION_TYPES = {"pro", "max", "team", "enterprise"}
 WORKSPACE_READ_TOOLS = ["Read", "Glob", "Grep"]
 WORKSPACE_WRITE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"]
-DELEGATE_VERSION = "0.2.0"
+DELEGATE_VERSION = "0.2.1"
 CONTRACT_VERSION = 2
 SAFE_CLAUDE_ENV_NAMES = {
     "HOME",

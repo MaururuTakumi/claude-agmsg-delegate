@@ -1,10 +1,10 @@
 {
   "summary": {
-    "score": 135,
-    "max_score": 135,
+    "score": 147,
+    "max_score": 147,
     "rate": 1.0,
-    "cases": 11,
-    "passed_cases": 11,
+    "cases": 12,
+    "passed_cases": 12,
     "by_split": {
       "train": {
         "score": 47,
@@ -15,10 +15,10 @@
         "case_pass_rate": 1.0
       },
       "validation": {
-        "score": 88,
-        "max_score": 88,
-        "cases": 7,
-        "passed_cases": 7,
+        "score": 100,
+        "max_score": 100,
+        "cases": 8,
+        "passed_cases": 8,
         "rate": 1.0,
         "case_pass_rate": 1.0
       }
@@ -61,7 +61,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/ai-clone-install.md"
+      "output_path": "runs/candidate/ai-clone-install.md"
     },
     {
       "id": "manual-install",
@@ -95,7 +95,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/manual-install.md"
+      "output_path": "runs/candidate/manual-install.md"
     },
     {
       "id": "security-boundary",
@@ -217,7 +217,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/security-boundary.md"
+      "output_path": "runs/candidate/security-boundary.md"
     },
     {
       "id": "timeout-collection",
@@ -251,7 +251,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/timeout-collection.md"
+      "output_path": "runs/candidate/timeout-collection.md"
     },
     {
       "id": "validation-x-launch",
@@ -297,7 +297,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/validation-x-launch.md"
+      "output_path": "runs/candidate/validation-x-launch.md"
     },
     {
       "id": "validation-missing-agmsg",
@@ -351,7 +351,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/validation-missing-agmsg.md"
+      "output_path": "runs/candidate/validation-missing-agmsg.md"
     },
     {
       "id": "validation-first-team-delivery",
@@ -409,7 +409,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/validation-first-team-delivery.md"
+      "output_path": "runs/candidate/validation-first-team-delivery.md"
     },
     {
       "id": "validation-monetary-output",
@@ -459,7 +459,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/validation-monetary-output.md"
+      "output_path": "runs/candidate/validation-monetary-output.md"
     },
     {
       "id": "validation-official-agmsg-compatibility",
@@ -525,7 +525,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/validation-official-agmsg-compatibility.md"
+      "output_path": "runs/candidate/validation-official-agmsg-compatibility.md"
     },
     {
       "id": "validation-workspace-read",
@@ -591,7 +591,7 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/validation-workspace-read.md"
+      "output_path": "runs/candidate/validation-workspace-read.md"
     },
     {
       "id": "validation-stale-tools-running-grounding",
@@ -601,7 +601,7 @@
       "passed": true,
       "checks": [
         {
-          "name": "required_term:0.2.0",
+          "name": "required_term:0.2.1",
           "passed": true
         },
         {
@@ -673,7 +673,65 @@
           "passed": true
         }
       ],
-      "output_path": "evals/oss-readiness/runs/candidate/validation-stale-tools-running-grounding.md"
+      "output_path": "runs/candidate/validation-stale-tools-running-grounding.md"
+    },
+    {
+      "id": "validation-update-backup-isolation",
+      "split": "validation",
+      "score": 12,
+      "max_score": 12,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:0.2.1",
+          "passed": true
+        },
+        {
+          "name": "required_term:skill-backups",
+          "passed": true
+        },
+        {
+          "name": "required_term:claude-agmsg-delegate.backup-",
+          "passed": true
+        },
+        {
+          "name": "required_term:status 4",
+          "passed": true
+        },
+        {
+          "name": "required_term:restart Codex",
+          "passed": true
+        },
+        {
+          "name": "required_term:new task",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:run npx agmsg",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:list-ids.sh is required",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:delete all backups",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:API fallback",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(move|migrate).*(backup).*(outside|out of).*(skills|discovery)",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(preserve|intact|do not delete|never delete).*(backup|duplicate)",
+          "passed": true
+        }
+      ],
+      "output_path": "runs/candidate/validation-update-backup-isolation.md"
     }
   ]
 }

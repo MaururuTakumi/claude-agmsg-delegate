@@ -7,6 +7,6 @@ https://github.com/MaururuTakumi/claude-agmsg-delegate
 
 4. 初回だけagmsg設定を聞かれます。既存teamがなければ「<対象project名>-team / codex」、deliveryは「1」またはEnterのturnを選んでください。monitorは選びません。
 
-5. Codexを再起動し、「Fableに設計レビュー」「Sonnetに実装して。完了後にdiffをレビューして」と頼んでください。
+5. Codexを再起動して新しいタスクを開き、「Fableに設計レビュー」「Sonnetに実装して。完了後にdiffをレビューして」と頼んでください。
 
 これでClaudeの画面やtmuxを開かず、Codexからagmsg経由でサブスクのFable／Sonnetを呼べるようになります。

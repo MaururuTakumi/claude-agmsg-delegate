@@ -51,7 +51,7 @@ Do these in order before proposing changes or installing anything:
    This dry-run may execute the read-only local `claude auth status --json`
    command. It must not send agmsg, create job state, or run a model.
 
-10. Require delegate version `0.2.0` and `contract_version=2`, then report the resolved team, sender, receiver, model,
+10. Require delegate version `0.2.1` and `contract_version=2`, then report the resolved team, sender, receiver, model,
    `billing_mode: subscription`, paid `subscription_type`, execution mode,
    tool allowlist, and review requirement.
 
@@ -110,6 +110,11 @@ do not invoke Fable or Sonnet during dependency installation or verification.
 - The Python wrapper owns all agmsg I/O through `whoami.sh`, `send.sh`, and the
   official local read-only `api.sh`. Existing pre-release installations with
   `list-ids.sh` remain supported, but a fresh install never requires that file.
+- Installer backups live under
+  `<codex-home>/skill-backups/claude-agmsg-delegate/`, outside `skills/`.
+  Old installer-created `skills/claude-agmsg-delegate.backup-*` directories are
+  moved there intact. Unknown duplicate Skills are listed and stop readiness
+  verification; they are never deleted or moved automatically.
 - Monetary usage metadata from Claude CLI is excluded from agmsg responses,
   saved public state, and terminal output.
 - Every request and response has one stable `job_id`.

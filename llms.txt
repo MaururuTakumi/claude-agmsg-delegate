@@ -14,8 +14,8 @@ AI install sequence:
 4. Before final verification, change to the target project where delegation will be used; never join the temporary Skill clone merely to pass verification. Require executable agmsg `whoami.sh`, `send.sh`, and official local read-only `api.sh` scripts. The latter is a JSONL reader, not an Anthropic API call. A legacy `list-ids.sh` installation is accepted but never required.
 5. If agmsg is missing, stop and get explicit approval before `npx agmsg`, team join, or delivery-mode setup. After approval, use only `whoami.sh`, `join.sh`, and `delivery.sh` from the target project. With no existing team, propose `<target-project-name>-team / codex` and wait for confirmation. Offer only `1) turn` (recommended; Enter means turn) or `2) off`; never select `monitor` or `both`. Never silently create or edit agmsg files directly.
 6. If authorized: ./install.sh
-7. Restart Codex.
-8. Verify `delegate_claude.py --version` is `0.2.0`, then run delegate_claude.py run --model fable --task "Installation verification only." --dry-run and require `contract_version=2`.
+7. Restart Codex and start a new task so the pre-update Skill cannot remain cached.
+8. Verify `delegate_claude.py --version` is `0.2.1`, then run delegate_claude.py run --model fable --task "Installation verification only." --dry-run and require `contract_version=2`.
 9. The dry-run may execute local read-only `claude auth status --json`, but must not send agmsg or invoke a model.
 
 Safety invariants:
@@ -45,4 +45,4 @@ Primary files:
 - SKILL.md: Codex Skill behavior
 - scripts/delegate_claude.py: deterministic wrapper
 - tests/test_delegate_claude.py: no-network fixture E2E
-- install.sh: non-destructive installer with dry-run and backups
+- install.sh: non-destructive installer with dry-run, backups outside skills/, and legacy-backup quarantine
