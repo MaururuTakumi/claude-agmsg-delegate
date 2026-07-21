@@ -22,7 +22,7 @@ irreversible work.
 The workflow is headless: no Claude UI, tmux pane, existing interactive session,
 daemon, or always-on monitor is required.
 
-Current runtime contract: delegate version `0.2.1`, `contract_version=2`.
+Current runtime contract: delegate version `0.3.0`, `contract_version=2`.
 `Read,Glob,Grep` is the expected Fable/advisory Sonnet policy. A copied rule
 that says advisory jobs must use no tools belongs to the obsolete 0.1 contract;
 do not stop or ask for a one-off exception. Reinstall the current Skill, restart
@@ -77,9 +77,24 @@ Codex, and confirm `delegate_claude.py --version` instead.
 
 ## First-time agmsg setup
 
-Before the final installed-Skill dry-run, verify that these agmsg scripts exist
-and are executable under `~/.agents/skills/agmsg/scripts/`: `whoami.sh`,
-`send.sh`, and `api.sh`.
+Install this offline Skill before resolving runtime dependencies. Missing Claude
+or agmsg must not leave the Skill uninstalled. Then, from the target project,
+run the non-mutating readiness check before the final installed-Skill dry-run:
+
+```bash
+python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py doctor
+```
+
+`doctor` does not invoke a model, send agmsg, create job state, access the
+network, or change settings. It checks Python, the installed Skill, standard
+Claude Code locations, subscription authentication, agmsg, and local paths. It
+uses stable issue codes so a coding agent can distinguish an uninstalled Skill,
+an out-of-PATH Claude binary, and missing/outdated/wrong-path agmsg. Official
+agmsg 1.1.8 and newer includes `api.sh`.
+
+Before the final dry-run, require executable `whoami.sh`, `send.sh`, and
+`api.sh` under `~/.agents/skills/agmsg/scripts/` (or an already installed legacy
+`list-ids.sh` reader supported by the wrapper).
 
 If any script is missing:
 
@@ -202,5 +217,5 @@ Confirm all of the following before accepting the delegated result:
    and ran relevant tests; Claude did not run commands, deploy, install, or push.
 7. The result covers the bounded request and labels assumptions.
 8. Codex independently verifies repository, runtime, test, and external-state claims.
-9. `delegate_version=0.2.1` and `contract_version=2`; no stale no-tools
+9. `delegate_version=0.3.0` and `contract_version=2`; no stale no-tools
    instruction overrode the installed runtime contract.

@@ -16,12 +16,24 @@ Do these in order before proposing changes or installing anything:
    ./install.sh --dry-run
    ```
 
-5. Before the final installed-Skill dry-run, change to the target project where
-   delegation will actually be used. Do not join this temporary Skill clone to
-   a team merely to make verification pass. Then verify that `whoami.sh`, `send.sh`,
-   and `api.sh` exist and are executable under
-   `~/.agents/skills/agmsg/scripts/`.
-6. If any required agmsg script is missing, stop and ask for explicit approval
+5. If the user asked to install this Skill, run `./install.sh` now. The installer
+   is offline and does not need Claude or agmsg. Missing runtime dependencies
+   must not leave the Skill uninstalled. Use `--force` only for an existing
+   installation after reviewing the dry-run.
+6. Change to the target project where delegation will actually be used. Do not
+   join this temporary Skill clone to a team merely to make verification pass.
+   Run the installed, non-mutating readiness check:
+
+   ```bash
+   python3 "${CODEX_HOME:-$HOME/.codex}/skills/claude-agmsg-delegate/scripts/delegate_claude.py" doctor
+   ```
+
+   `doctor` may execute the read-only local `claude auth status --json` command.
+   It does not invoke a model, send agmsg, create job state, make a network
+   request, or change local settings. It automatically checks PATH plus standard
+   local Claude Code locations and distinguishes missing, outdated, legacy, and
+   wrong-path agmsg installations using stable issue codes.
+7. If any required agmsg script is missing, stop and ask for explicit approval
    before running `npx agmsg`. Explain that installation, team joining, and
    delivery-mode selection change local agent routing. After approval, install
    with `npx agmsg`, use the installed agmsg Skill's `whoami.sh`, `join.sh`, and
@@ -30,14 +42,13 @@ Do these in order before proposing changes or installing anything:
    `<target-project-name>-team` and agent `codex`, display both values, and wait
    for confirmation before `join.sh`; never create them silently. If the target
    project is unknown, ask the user.
-   `api.sh` is agmsg's official local, read-only JSONL interface. It reads the
-   local agmsg store and is not an Anthropic API or a metered model call.
-7. After joining, ask for delivery mode separately. Offer only `1) turn`
+   `api.sh` is agmsg's official local, read-only JSONL interface, included in
+   official agmsg 1.1.8 and newer. It reads the local agmsg store and is not an
+   Anthropic API or a metered model call.
+8. After joining, ask for delivery mode separately. Offer only `1) turn`
    (recommended; empty input or Enter selects it) and `2) off`. Wait for the
    answer, then use `delivery.sh`. Never select or recommend `monitor` or
    `both`, even if `npx agmsg` displays them.
-8. If the user asked to install this Skill, run `./install.sh` only after the
-   deterministic checks pass.
 9. Verify the installed Skill without running Claude model inference:
 
    ```bash
@@ -51,7 +62,7 @@ Do these in order before proposing changes or installing anything:
    This dry-run may execute the read-only local `claude auth status --json`
    command. It must not send agmsg, create job state, or run a model.
 
-10. Require delegate version `0.2.1` and `contract_version=2`, then report the resolved team, sender, receiver, model,
+10. Require delegate version `0.3.0` and `contract_version=2`, then report the resolved Claude binary, team, sender, receiver, model,
    `billing_mode: subscription`, paid `subscription_type`, execution mode,
    tool allowlist, and review requirement.
 

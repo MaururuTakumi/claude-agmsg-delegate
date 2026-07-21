@@ -206,6 +206,7 @@ fi
 
 echo "installed: $DEST (version $INSTALLED_VERSION)"
 echo "backup root: $BACKUP_ROOT"
+echo "doctor: change to the target project, then run python3 $DEST/scripts/delegate_claude.py doctor"
 echo "next: restart Codex and start a new task, then ask it to use \$claude-agmsg-delegate"
 echo "note: the current task may keep the pre-update Skill instructions until a new task starts"
 echo "verify: python3 $DEST/scripts/delegate_claude.py run --model fable --task 'Installation verification only.' --dry-run"

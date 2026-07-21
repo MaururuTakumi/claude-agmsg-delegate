@@ -4,19 +4,19 @@ Purpose: Codex Skill for bounded, headless review and opt-in Sonnet Git-workspac
 
 Repository: https://github.com/MaururuTakumi/claude-agmsg-delegate
 License: MIT
-Runtime dependencies: Python 3.10+, Codex, Claude Code, agmsg
+Runtime dependencies: Python 3.9+, Codex, Claude Code, agmsg
 Python package dependencies: none
 
 AI install sequence:
 1. Read AGENTS.md, README.md, SKILL.md.
 2. Run: make test
 3. Run: ./install.sh --dry-run
-4. Before final verification, change to the target project where delegation will be used; never join the temporary Skill clone merely to pass verification. Require executable agmsg `whoami.sh`, `send.sh`, and official local read-only `api.sh` scripts. The latter is a JSONL reader, not an Anthropic API call. A legacy `list-ids.sh` installation is accepted but never required.
-5. If agmsg is missing, stop and get explicit approval before `npx agmsg`, team join, or delivery-mode setup. After approval, use only `whoami.sh`, `join.sh`, and `delivery.sh` from the target project. With no existing team, propose `<target-project-name>-team / codex` and wait for confirmation. Offer only `1) turn` (recommended; Enter means turn) or `2) off`; never select `monitor` or `both`. Never silently create or edit agmsg files directly.
-6. If authorized: ./install.sh
+4. Install the offline Skill with `./install.sh` before resolving runtime dependencies. Missing Claude or agmsg must not leave it uninstalled.
+5. Change to the target project where delegation will be used and run the installed `delegate_claude.py doctor`; never join the temporary Skill clone merely to pass verification. Doctor is non-mutating and checks Python, Skill installation, standard Claude locations, subscription auth, and agmsg. Official agmsg 1.1.8+ includes local read-only `api.sh`; a legacy `list-ids.sh` installation is accepted but never required.
+6. If agmsg is missing or outdated, stop and get explicit approval before `npx agmsg`, team join, or delivery-mode setup. After approval, use only `whoami.sh`, `join.sh`, and `delivery.sh` from the target project. With no existing team, propose `<target-project-name>-team / codex` and wait for confirmation. Offer only `1) turn` (recommended; Enter means turn) or `2) off`; never select `monitor` or `both`. Never silently create or edit agmsg files directly.
 7. Restart Codex and start a new task so the pre-update Skill cannot remain cached.
-8. Verify `delegate_claude.py --version` is `0.2.1`, then run delegate_claude.py run --model fable --task "Installation verification only." --dry-run and require `contract_version=2`.
-9. The dry-run may execute local read-only `claude auth status --json`, but must not send agmsg or invoke a model.
+8. Verify `delegate_claude.py --version` is `0.3.0`, then run delegate_claude.py run --model fable --task "Installation verification only." --dry-run and require `contract_version=2`.
+9. Doctor and dry-run may execute local read-only `claude auth status --json`, but must not send agmsg or invoke a model.
 
 Safety invariants:
 - Codex owns orchestration, diff review, commands, tests, integration, and final decisions.

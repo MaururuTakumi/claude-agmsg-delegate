@@ -18,6 +18,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import time
@@ -36,8 +37,17 @@ SENSITIVE_PATTERNS = [
 PAID_SUBSCRIPTION_TYPES = {"pro", "max", "team", "enterprise"}
 WORKSPACE_READ_TOOLS = ["Read", "Glob", "Grep"]
 WORKSPACE_WRITE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"]
-DELEGATE_VERSION = "0.2.1"
+DELEGATE_VERSION = "0.3.0"
 CONTRACT_VERSION = 2
+MIN_PYTHON = (3, 9)
+CLAUDE_FIXED_CANDIDATES = (
+    ".local/bin/claude",
+    ".claude/local/claude",
+)
+CLAUDE_SYSTEM_CANDIDATES = (
+    "/opt/homebrew/bin/claude",
+    "/usr/local/bin/claude",
+)
 SAFE_CLAUDE_ENV_NAMES = {
     "HOME",
     "LANG",
@@ -90,6 +100,10 @@ def default_state_dir() -> Path:
 
 def default_agmsg_dir() -> Path:
     return Path.home() / ".agents" / "skills" / "agmsg"
+
+
+def default_codex_home() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 
 
 def emit(data: dict[str, Any], code: int = 0) -> int:
@@ -174,6 +188,65 @@ def scripts_dir(agmsg_dir: Path) -> Path:
     return agmsg_dir.expanduser().resolve() / "scripts"
 
 
+def is_executable_file(path: Path) -> bool:
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def claude_binary_candidates(requested: str | None = None) -> list[Path]:
+    candidates: list[Path] = []
+    if requested:
+        if "/" in requested or requested.startswith("~"):
+            candidates.append(Path(requested).expanduser())
+        else:
+            found = shutil.which(requested)
+            if found:
+                candidates.append(Path(found))
+            else:
+                candidates.append(Path(requested))
+    else:
+        found = shutil.which("claude")
+        if found:
+            candidates.append(Path(found))
+        home = Path.home()
+        candidates.extend(home / relative for relative in CLAUDE_FIXED_CANDIDATES)
+        candidates.extend(Path(item) for item in CLAUDE_SYSTEM_CANDIDATES)
+
+    if os.environ.get("CLAUDE_AGMSG_DELEGATE_TESTING") == "1":
+        extra = os.environ.get("FAKE_CLAUDE_DISCOVERY_DIRS", "")
+        candidates.extend(Path(item).expanduser() / "claude" for item in extra.split(os.pathsep) if item)
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate.expanduser().absolute())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+    return unique
+
+
+def resolve_claude_binary(requested: str | None = None) -> tuple[str, list[str], bool]:
+    candidates = claude_binary_candidates(requested)
+    checked = [str(candidate.expanduser().absolute()) for candidate in candidates]
+    path_match = shutil.which("claude") if requested is None else None
+    for candidate in candidates:
+        expanded = candidate.expanduser()
+        if not expanded.is_absolute() and "/" not in str(expanded):
+            found = shutil.which(str(expanded))
+            if not found:
+                continue
+            expanded = Path(found)
+        if is_executable_file(expanded):
+            resolved = str(expanded.resolve())
+            outside_path = requested is None and (
+                path_match is None or str(Path(path_match).resolve()) != resolved
+            )
+            return resolved, checked, outside_path
+    detail = ", ".join(checked) if checked else "PATH and standard install locations"
+    raise DelegateError(f"Claude Code executable was not found; checked: {detail}")
+
+
 def required_script(agmsg_dir: Path, name: str) -> Path:
     path = scripts_dir(agmsg_dir) / name
     if not path.is_file() or not os.access(path, os.X_OK):
@@ -197,7 +270,8 @@ def validate_agmsg_transport(agmsg_dir: Path) -> str:
     if optional_script(agmsg_dir, "list-ids.sh") is not None:
         return "list-ids.sh (legacy compatibility)"
     raise DelegateError(
-        "agmsg has no supported message reader; install or update official agmsg so "
+        "agmsg has no supported message reader; official agmsg 1.1.8 or newer includes api.sh; "
+        "install or update official agmsg after explicit approval so "
         f"{scripts_dir(agmsg_dir) / 'api.sh'} exists and is executable"
     )
 
@@ -304,6 +378,332 @@ def verify_subscription_auth(claude_bin: str, project: Path) -> dict[str, str]:
         "api_provider": api_provider,
         "subscription_type": subscription_type,
     }
+
+
+def read_version_marker(directory: Path) -> str | None:
+    marker = directory / "VERSION"
+    if not marker.is_file():
+        return None
+    try:
+        value = marker.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+    return value or None
+
+
+def find_named_skills(codex_home: Path) -> list[dict[str, str]]:
+    skills_root = codex_home / "skills"
+    if not skills_root.is_dir():
+        return []
+    found: list[dict[str, str]] = []
+    for directory in sorted(skills_root.iterdir()):
+        skill = directory / "SKILL.md"
+        if not skill.is_file():
+            continue
+        try:
+            lines = skill.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError):
+            continue
+        if not lines or lines[0].strip() != "---":
+            continue
+        name = ""
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            key, separator, value = line.partition(":")
+            if separator and key.strip() == "name":
+                name = value.strip().strip("\"'")
+                break
+        if name == "claude-agmsg-delegate":
+            found.append(
+                {
+                    "path": str(directory.resolve()),
+                    "version": read_version_marker(directory) or "unknown",
+                }
+            )
+    return found
+
+
+def nearest_existing_parent(path: Path) -> Path:
+    current = path.expanduser().absolute()
+    while not current.exists() and current != current.parent:
+        current = current.parent
+    return current
+
+
+def agmsg_common_candidates(selected: Path) -> list[Path]:
+    candidates = [
+        selected.expanduser(),
+        Path.home() / ".agents" / "skills" / "agmsg",
+        Path.home() / ".codex" / "skills" / "agmsg",
+        Path.home() / ".claude" / "skills" / "agmsg",
+    ]
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate.absolute())
+        if key not in seen:
+            seen.add(key)
+            unique.append(candidate)
+    return unique
+
+
+def doctor_main(args: argparse.Namespace) -> int:
+    issues: list[dict[str, Any]] = []
+    checks: list[dict[str, Any]] = []
+
+    def add_issue(
+        code: str,
+        severity: str,
+        message: str,
+        remediation: str,
+        evidence: dict[str, Any] | None = None,
+    ) -> None:
+        item: dict[str, Any] = {
+            "code": code,
+            "severity": severity,
+            "message": redact(message),
+            "remediation": remediation,
+        }
+        if evidence:
+            item["evidence"] = evidence
+        issues.append(item)
+
+    python_version = ".".join(str(item) for item in sys.version_info[:3])
+    python_ok = sys.version_info >= MIN_PYTHON
+    checks.append(
+        {
+            "name": "python",
+            "status": "ok" if python_ok else "error",
+            "executable": str(Path(sys.executable).resolve()),
+            "version": python_version,
+            "minimum": "3.9",
+        }
+    )
+    if not python_ok:
+        add_issue(
+            "PYTHON_VERSION_UNSUPPORTED",
+            "error",
+            f"Python {python_version} is unsupported; Python 3.9 or newer is required",
+            "Run this Skill with Python 3.9 or newer.",
+        )
+
+    codex_home = Path(args.codex_home).expanduser().absolute()
+    expected_skill = codex_home / "skills" / "claude-agmsg-delegate"
+    named_skills = find_named_skills(codex_home)
+    installed_version = read_version_marker(expected_skill)
+    checks.append(
+        {
+            "name": "skill_install",
+            "status": "ok" if installed_version == DELEGATE_VERSION and len(named_skills) == 1 else "error",
+            "expected_path": str(expected_skill),
+            "installed_version": installed_version,
+            "named_skill_count": len(named_skills),
+        }
+    )
+    if installed_version is None:
+        add_issue(
+            "SKILL_NOT_INSTALLED",
+            "error",
+            f"claude-agmsg-delegate is not installed at {expected_skill}",
+            "From the cloned repository, run ./install.sh after make test and ./install.sh --dry-run.",
+        )
+    elif installed_version != DELEGATE_VERSION:
+        add_issue(
+            "SKILL_VERSION_MISMATCH",
+            "error",
+            f"installed Skill version {installed_version} does not match this repository version {DELEGATE_VERSION}",
+            "Run ./install.sh --force, then restart Codex and start a new task.",
+        )
+    if len(named_skills) > 1:
+        add_issue(
+            "SKILL_DUPLICATE_NAME",
+            "error",
+            "multiple Codex Skills declare the name claude-agmsg-delegate",
+            "Move only the unwanted copy outside the Codex skills directory, then reinstall.",
+            {"skills": named_skills},
+        )
+
+    project = Path(args.project).expanduser().absolute()
+    if not project.is_dir():
+        checks.append({"name": "project", "status": "error", "path": str(project)})
+        add_issue(
+            "PROJECT_NOT_FOUND",
+            "error",
+            f"target project directory does not exist: {project}",
+            "Run doctor from the project where delegation will be used or pass --project PATH.",
+        )
+    else:
+        checks.append({"name": "project", "status": "ok", "path": str(project.resolve())})
+
+    resolved_claude: str | None = None
+    try:
+        resolved_claude, searched, outside_path = resolve_claude_binary(args.claude_bin)
+        checks.append(
+            {
+                "name": "claude_binary",
+                "status": "ok",
+                "path": resolved_claude,
+                "searched": searched,
+            }
+        )
+        if outside_path:
+            add_issue(
+                "CLAUDE_BIN_OUTSIDE_PATH",
+                "info",
+                f"Claude Code was found outside PATH at {resolved_claude}",
+                "No action is required; the wrapper pins this absolute path for the worker.",
+            )
+    except DelegateError as exc:
+        checks.append({"name": "claude_binary", "status": "error"})
+        add_issue(
+            "CLAUDE_BIN_NOT_FOUND",
+            "error",
+            str(exc),
+            "Install Claude Code or pass --claude-bin PATH. The wrapper will not fall back to an API provider.",
+        )
+
+    if resolved_claude and project.is_dir():
+        try:
+            auth = verify_subscription_auth(resolved_claude, project)
+            checks.append({"name": "claude_auth", "status": "ok", **auth})
+        except DelegateError as exc:
+            message = str(exc)
+            code = "AUTH_ENV_BLOCKED" if "environment variable" in message else (
+                "CLAUDE_AUTH_STATUS_INVALID" if "invalid JSON" in message or "not a JSON" in message or "command failed" in message
+                else "CLAUDE_AUTH_NOT_SUBSCRIPTION"
+            )
+            checks.append({"name": "claude_auth", "status": "error"})
+            add_issue(
+                code,
+                "error",
+                message,
+                "Remove the reported provider credentials, then run claude auth login with a paid Claude.ai subscription.",
+            )
+
+    agmsg_dir = Path(args.agmsg_dir).expanduser().absolute()
+    agmsg_version = read_version_marker(agmsg_dir)
+    agmsg_scripts = scripts_dir(agmsg_dir)
+    required_names = ("whoami.sh", "send.sh")
+    missing_required = [name for name in required_names if not (agmsg_scripts / name).exists()]
+    non_executable = [
+        name
+        for name in (*required_names, "api.sh")
+        if (agmsg_scripts / name).is_file() and not os.access(agmsg_scripts / name, os.X_OK)
+    ]
+    api_ok = is_executable_file(agmsg_scripts / "api.sh")
+    legacy_ok = is_executable_file(agmsg_scripts / "list-ids.sh")
+    agmsg_ok = not missing_required and not non_executable and (api_ok or legacy_ok)
+    checks.append(
+        {
+            "name": "agmsg",
+            "status": "ok" if agmsg_ok else "error",
+            "path": str(agmsg_dir.resolve()) if agmsg_dir.exists() else str(agmsg_dir),
+            "version": agmsg_version,
+            "reader": "api.sh" if api_ok else ("list-ids.sh (legacy compatibility)" if legacy_ok else None),
+        }
+    )
+    approval_remediation = (
+        "Stop before delegation and ask for explicit approval before running npx agmsg, joining a team, "
+        "or selecting delivery mode; doctor never changes those settings."
+    )
+    if not agmsg_dir.is_dir():
+        add_issue(
+            "AGMSG_NOT_INSTALLED",
+            "error",
+            f"agmsg is not installed at {agmsg_dir}",
+            approval_remediation,
+        )
+    else:
+        if non_executable:
+            add_issue(
+                "AGMSG_SCRIPT_NOT_EXECUTABLE",
+                "error",
+                "agmsg script(s) are present but not executable: " + ", ".join(non_executable),
+                "Repair or reinstall agmsg only after explicit approval; do not edit its database or team files.",
+            )
+        if not api_ok and legacy_ok:
+            add_issue(
+                "AGMSG_LEGACY_READER",
+                "warning",
+                "agmsg uses legacy list-ids.sh compatibility because api.sh is unavailable",
+                "Update to official agmsg 1.1.8 or newer after explicit approval; existing jobs remain supported.",
+                {"version": agmsg_version},
+            )
+        elif not api_ok and not legacy_ok:
+            missing = [*missing_required, "api.sh"]
+            add_issue(
+                "AGMSG_OUTDATED",
+                "error",
+                "agmsg is missing required script(s): " + ", ".join(missing),
+                approval_remediation,
+                {"version": agmsg_version, "path": str(agmsg_dir.resolve())},
+            )
+        elif missing_required:
+            add_issue(
+                "AGMSG_OUTDATED",
+                "error",
+                "agmsg is missing required script(s): " + ", ".join(missing_required),
+                approval_remediation,
+                {"version": agmsg_version, "path": str(agmsg_dir.resolve())},
+            )
+
+    if not agmsg_ok:
+        alternates = []
+        selected_key = str(agmsg_dir.resolve()) if agmsg_dir.exists() else str(agmsg_dir)
+        for candidate in agmsg_common_candidates(agmsg_dir):
+            if not candidate.is_dir():
+                continue
+            resolved = candidate.resolve()
+            if str(resolved) == selected_key:
+                continue
+            try:
+                validate_agmsg_transport(resolved)
+            except DelegateError:
+                continue
+            alternates.append(str(resolved))
+        if alternates:
+            add_issue(
+                "AGMSG_ALTERNATE_INSTALL_FOUND",
+                "warning",
+                "a compatible agmsg installation exists at another path",
+                "Review the path and pass --agmsg-dir explicitly; the wrapper will not switch installations automatically.",
+                {"selected": selected_key, "alternates": alternates},
+            )
+
+    state_dir = Path(args.state_dir).expanduser().absolute()
+    state_parent = nearest_existing_parent(state_dir)
+    state_writable = state_parent.is_dir() and os.access(state_parent, os.W_OK)
+    checks.append(
+        {
+            "name": "state_directory",
+            "status": "ok" if state_writable else "error",
+            "path": str(state_dir),
+            "checked_parent": str(state_parent),
+        }
+    )
+    if not state_writable:
+        add_issue(
+            "STATE_DIR_UNWRITABLE",
+            "error",
+            f"job state directory cannot be created under {state_parent}",
+            "Choose a writable --state-dir before running a delegation.",
+        )
+
+    has_errors = any(item["severity"] == "error" for item in issues)
+    return emit(
+        {
+            "status": "issues" if has_errors else "ok",
+            "delegate_version": DELEGATE_VERSION,
+            "contract_version": CONTRACT_VERSION,
+            "mutating": False,
+            "model_invoked": False,
+            "network_required": False,
+            "checks": checks,
+            "issues": issues,
+        },
+        1 if has_errors else 0,
+    )
 
 
 def infer_identity(project: Path, agmsg_dir: Path) -> tuple[str, str]:
@@ -835,7 +1235,8 @@ def run_main(args: argparse.Namespace) -> int:
     if args.workspace_write:
         require_git_worktree(project)
     policy = execution_policy(args.workspace_write)
-    subscription_auth = verify_subscription_auth(args.claude_bin, project)
+    claude_bin, claude_searched, claude_outside_path = resolve_claude_binary(args.claude_bin)
+    subscription_auth = verify_subscription_auth(claude_bin, project)
 
     team = args.team
     from_agent = args.from_agent
@@ -884,6 +1285,9 @@ def run_main(args: argparse.Namespace) -> int:
                 "from_agent": from_agent,
                 "to_agent": to_agent,
                 "agmsg_reader": agmsg_reader,
+                "claude_bin": claude_bin,
+                "claude_outside_path": claude_outside_path,
+                "claude_searched": claude_searched,
                 "request": request,
                 "claude_policy": {
                     "safe_mode": True,
@@ -930,7 +1334,7 @@ def run_main(args: argparse.Namespace) -> int:
         "project": str(project),
         "agmsg_dir": str(agmsg_dir),
         "agmsg_reader": agmsg_reader,
-        "claude_bin": args.claude_bin,
+        "claude_bin": claude_bin,
         "effort": args.effort,
         "billing_mode": subscription_auth["billing_mode"],
         "auth_method": subscription_auth["auth_method"],
@@ -1001,7 +1405,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-message-chars", type=int, default=12000)
     run.add_argument("--agmsg-dir", default=str(default_agmsg_dir()))
     run.add_argument("--state-dir", default=str(default_state_dir()))
-    run.add_argument("--claude-bin", default="claude")
+    run.add_argument(
+        "--claude-bin",
+        help="Explicit Claude Code executable. Otherwise PATH and standard local install paths are checked.",
+    )
     run.add_argument(
         "--workspace-write",
         action="store_true",
@@ -1016,6 +1423,17 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--state-dir", default=str(default_state_dir()))
     collect.set_defaults(func=collect_main)
 
+    doctor = sub.add_parser(
+        "doctor",
+        help="Check Skill, Python, Claude subscription auth, agmsg, and local paths without changing them.",
+    )
+    doctor.add_argument("--project", default=os.getcwd())
+    doctor.add_argument("--agmsg-dir", default=str(default_agmsg_dir()))
+    doctor.add_argument("--state-dir", default=str(default_state_dir()))
+    doctor.add_argument("--codex-home", default=str(default_codex_home()))
+    doctor.add_argument("--claude-bin")
+    doctor.set_defaults(func=doctor_main)
+
     worker = sub.add_parser("_worker", help=argparse.SUPPRESS)
     worker.add_argument("--job-id", required=True)
     worker.add_argument("--state-dir", required=True)
@@ -1024,6 +1442,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    if sys.version_info < MIN_PYTHON:
+        return fail(
+            "Python 3.9 or newer is required; current interpreter is "
+            + ".".join(str(item) for item in sys.version_info[:3]),
+            code=2,
+        )
     parser = build_parser()
     args = parser.parse_args()
     try:

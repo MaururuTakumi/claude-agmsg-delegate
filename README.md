@@ -26,13 +26,14 @@ Paste this into Codex or another coding agent:
 Clone https://github.com/MaururuTakumi/claude-agmsg-delegate into a temporary directory.
 Read AGENTS.md and README.md completely.
 Run make test and ./install.sh --dry-run.
+If they pass, install the offline Skill immediately with ./install.sh (or the reviewed --force update path). Missing Claude or agmsg runtime dependencies must not leave the Skill uninstalled.
+Change to the project where delegation will actually be used and run the installed delegate_claude.py doctor command. Doctor must not invoke a model, send agmsg, create job state, access the network, or change settings.
 Confirm that Claude Code is logged in with a paid Claude.ai subscription and that no API-key or cloud-provider credential is active.
-Before the final Skill dry-run, verify that ~/.agents/skills/agmsg/scripts/whoami.sh, send.sh, and api.sh exist and are executable. api.sh is agmsg's local read-only JSONL reader, not an Anthropic API call.
+Before the final Skill dry-run, verify that ~/.agents/skills/agmsg/scripts/whoami.sh, send.sh, and api.sh exist and are executable. Official agmsg 1.1.8 and newer includes api.sh; it is a local read-only JSONL reader, not an Anthropic API call.
 If agmsg is missing or outdated, stop and ask me for explicit approval before running npx agmsg, joining a team, or choosing a delivery mode. Do not guess those settings or edit agmsg files directly.
 After I approve, install agmsg and change to the target project where delegation will be used. If no teams exist, propose <target-project-name>-team and codex, show both, and wait for my confirmation before join.sh. Ask for delivery separately: recommend 1) turn, allow 2) off, and never choose monitor or both. Empty input or Enter means turn. Use only the provided whoami.sh, join.sh, and delivery.sh procedures. Do not join the temporary Skill clone just to pass verification. Then resume the final dry-run from the target project without invoking a Claude model.
-If the checks pass, install the Skill for my current Codex user.
 Do not run a Claude model or spend model usage during installation.
-Verify delegate_claude.py --version is 0.2.1.
+Verify delegate_claude.py --version is 0.3.0.
 Verify the installation with delegate_claude.py --dry-run; this may run the local read-only `claude auth status --json` check, but must not send an agmsg job or run model inference.
 Report the resolved route, subscription-only policy, execution mode, tool allowlist, and review requirement. Never display or forward Claude CLI monetary usage estimates.
 ```
@@ -42,7 +43,7 @@ That is the recommended installation path for vibe coders: let your AI inspect, 
 ## Requirements
 
 - macOS or Linux
-- Python 3.10+
+- Python 3.9+
 - [Codex](https://github.com/openai/codex)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - A paid Claude Pro, Max, Team, or seat-based Enterprise subscription
@@ -81,9 +82,6 @@ the setup, it must stop and get your explicit approval before running
 `npx agmsg`, joining a team, or selecting a delivery mode.
 
 ```bash
-# Install agmsg first if needed.
-npx agmsg
-
 git clone https://github.com/MaururuTakumi/claude-agmsg-delegate.git
 cd claude-agmsg-delegate
 
@@ -92,9 +90,30 @@ make test
 ./install.sh
 ```
 
-Change back to the project where you want Codex to delegate work before running
-the installed-Skill dry-run. Do not join the cloned Skill repository to an
-unrelated team merely to satisfy verification.
+The Skill is now installed even if Claude or agmsg is not ready. Change back to
+the project where you want Codex to delegate work and run the non-mutating
+diagnosis:
+
+```bash
+python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py doctor
+```
+
+`doctor` checks Python, the installed Skill, standard Claude Code locations,
+paid-subscription authentication, agmsg, and writable local paths. It does not
+invoke a model, send agmsg, create job state, require the network, or change any
+setting. Stable issue codes distinguish `SKILL_NOT_INSTALLED`,
+`CLAUDE_BIN_NOT_FOUND`, `CLAUDE_BIN_OUTSIDE_PATH`, `AGMSG_NOT_INSTALLED`,
+`AGMSG_OUTDATED`, and wrong-path or permission problems. If Claude Code is at
+`~/.local/bin/claude` but not on PATH, the wrapper finds and pins that absolute
+path automatically.
+
+Do not join the cloned Skill repository to an unrelated team merely to satisfy
+verification. If doctor reports missing or outdated agmsg, stop and get explicit
+approval before running `npx agmsg`:
+
+```bash
+npx agmsg
+```
 
 On a new device with no existing teams, a normal first-time choice is
 `<target-project-name>-team / codex` (for example, `movacal-team / codex`). The
@@ -169,7 +188,7 @@ Sonnet workspace implementation adds `--tools "Read,Edit,Write,Glob,Grep"
 --permission-mode acceptEdits`. Neither mode enables Bash or a permission
 bypass.
 
-Version `0.2.1` uses runtime `contract_version=2`. It requires at least one
+Version `0.3.0` uses runtime `contract_version=2`. It requires at least one
 observed `Read` tool event before accepting a Fable or Sonnet result. The wrapper
 returns `workspace_grounded=true` and project-relative `files_read`; a missing
 Read event or an observed path outside the selected project discards the result.
@@ -241,7 +260,7 @@ Completed result:
 {
   "job_id": "cad-sonnet-20260715T024848Z-a1b2c3",
   "status": "completed",
-  "delegate_version": "0.2.1",
+  "delegate_version": "0.3.0",
   "contract_version": 2,
   "requested_model": "sonnet",
   "actual_model": "claude-sonnet-5",
@@ -373,7 +392,7 @@ python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --versi
 
 The installer migrates its old `claude-agmsg-delegate.backup-*` directories
 outside `skills/` and stops if an unrelated same-name copy remains. The expected
-version is `0.2.1`. Restart Codex and start a new task; an already-running task
+version is `0.3.0`. Restart Codex and start a new task; an already-running task
 may retain the Skill instructions it loaded before the update.
 
 ### `subscription-only policy blocked ...`
@@ -452,7 +471,7 @@ exception. Update and reinstall the Skill, restart Codex, then verify:
 python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
 ```
 
-The expected version is `0.2.1`; dry-run reports `contract_version: 2`. A real
+The expected version is `0.3.0`; dry-run reports `contract_version: 2`. A real
 completed job must also report `workspace_grounded: true` and non-empty
 project-relative `files_read`. A dry-run alone never proves that files were read.
 

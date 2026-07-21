@@ -44,6 +44,7 @@ count_named_skills() {
 fresh_home="$TMP_ROOT/fresh"
 fresh_output="$("$ROOT/install.sh" --codex-home "$fresh_home")"
 assert_contains "$fresh_output" "installed:"
+assert_contains "$fresh_output" "delegate_claude.py doctor"
 assert_contains "$fresh_output" "restart Codex and start a new task"
 [ "$(cat "$fresh_home/skills/claude-agmsg-delegate/VERSION")" = "$(cat "$ROOT/VERSION")" ] ||
   fail "fresh install version mismatch"
