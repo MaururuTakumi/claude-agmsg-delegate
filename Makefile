@@ -6,7 +6,9 @@ test:
 	$(PYTHON) -m py_compile scripts/delegate_claude.py tests/test_delegate_claude.py
 	$(PYTHON) tests/test_delegate_claude.py -v
 	bash -n install.sh
+	bash -n tests/test_install.sh
 	./install.sh --help >/dev/null
+	bash tests/test_install.sh
 
 check: test
 	@if rg -n -i '/Users/|/tmp/|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN [A-Z ]*PRIVATE KEY|api[_-]?key[[:space:]]*[:=][[:space:]]*[^<]' \

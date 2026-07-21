@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.2.1 — 2026-07-20
+
+- Move update backups outside Codex's `skills/` discovery directory.
+- Migrate installer-created `claude-agmsg-delegate.backup-*` directories to the
+  new backup root without deleting or overwriting them.
+- Stop installation readiness when an unrelated same-name Skill remains, and
+  list every conflicting path and version.
+- Tell users to restart Codex and start a new task after updating.
+- Add macOS/Linux-compatible installer regression coverage for fresh installs,
+  forced updates, old-layout migration, collisions, dry-run, and unknown
+  duplicate Skills.
+
 ## 0.2.0 — 2026-07-15
 
 - Require and verify an observed Claude Code `Read` event before accepting a

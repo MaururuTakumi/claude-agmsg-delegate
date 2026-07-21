@@ -282,7 +282,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
-        self.assertEqual(payload["delegate_version"], "0.2.0")
+        self.assertEqual(payload["delegate_version"], "0.2.1")
         self.assertEqual(payload["contract_version"], 2)
         self.assertEqual(payload["agmsg_reader"], "api.sh")
         self.assertEqual(
@@ -324,7 +324,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--timeout", "5"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "completed")
-        self.assertEqual(payload["delegate_version"], "0.2.0")
+        self.assertEqual(payload["delegate_version"], "0.2.1")
         self.assertEqual(payload["contract_version"], 2)
         self.assertTrue(payload["workspace_grounded"])
         self.assertEqual(payload["files_read"], ["README.md"])
@@ -547,7 +547,7 @@ class DelegateTests(unittest.TestCase):
         state = {
             "job_id": job_id,
             "status": "running",
-            "delegate_version": "0.2.0",
+            "delegate_version": "0.2.1",
             "contract_version": 2,
             "model": "fable",
             "role": "reviewer",
