@@ -1,24 +1,24 @@
 {
   "summary": {
-    "score": 147,
-    "max_score": 147,
+    "score": 167,
+    "max_score": 167,
     "rate": 1.0,
-    "cases": 12,
-    "passed_cases": 12,
+    "cases": 13,
+    "passed_cases": 13,
     "by_split": {
       "train": {
-        "score": 47,
-        "max_score": 47,
+        "score": 51,
+        "max_score": 51,
         "cases": 4,
         "passed_cases": 4,
         "rate": 1.0,
         "case_pass_rate": 1.0
       },
       "validation": {
-        "score": 100,
-        "max_score": 100,
-        "cases": 8,
-        "passed_cases": 8,
+        "score": 116,
+        "max_score": 116,
+        "cases": 9,
+        "passed_cases": 9,
         "rate": 1.0,
         "case_pass_rate": 1.0
       }
@@ -61,21 +61,17 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/ai-clone-install.md"
+      "output_path": "evals/oss-readiness/runs/candidate/ai-clone-install.md"
     },
     {
       "id": "manual-install",
       "split": "train",
-      "score": 6,
-      "max_score": 6,
+      "score": 10,
+      "max_score": 10,
       "passed": true,
       "checks": [
         {
-          "name": "required_term:Python 3.10+",
-          "passed": true
-        },
-        {
-          "name": "required_term:npx agmsg",
+          "name": "required_term:Python 3.9+",
           "passed": true
         },
         {
@@ -87,15 +83,35 @@
           "passed": true
         },
         {
+          "name": "required_term:doctor",
+          "passed": true
+        },
+        {
+          "name": "required_term:npx agmsg",
+          "passed": true
+        },
+        {
+          "name": "required_term:explicit approval",
+          "passed": true
+        },
+        {
           "name": "required_term:restart Codex",
           "passed": true
         },
         {
           "name": "forbidden_term:pip install",
           "passed": true
+        },
+        {
+          "name": "forbidden_term:Python 3.10+",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(install|インストール).*(Skill).*(before|先).*(agmsg|runtime|dependency|依存)",
+          "passed": true
         }
       ],
-      "output_path": "runs/candidate/manual-install.md"
+      "output_path": "evals/oss-readiness/runs/candidate/manual-install.md"
     },
     {
       "id": "security-boundary",
@@ -217,7 +233,7 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/security-boundary.md"
+      "output_path": "evals/oss-readiness/runs/candidate/security-boundary.md"
     },
     {
       "id": "timeout-collection",
@@ -251,7 +267,7 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/timeout-collection.md"
+      "output_path": "evals/oss-readiness/runs/candidate/timeout-collection.md"
     },
     {
       "id": "validation-x-launch",
@@ -297,7 +313,7 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-x-launch.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-x-launch.md"
     },
     {
       "id": "validation-missing-agmsg",
@@ -351,7 +367,7 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-missing-agmsg.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-missing-agmsg.md"
     },
     {
       "id": "validation-first-team-delivery",
@@ -409,7 +425,7 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-first-team-delivery.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-first-team-delivery.md"
     },
     {
       "id": "validation-monetary-output",
@@ -459,21 +475,21 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-monetary-output.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-monetary-output.md"
     },
     {
       "id": "validation-official-agmsg-compatibility",
       "split": "validation",
-      "score": 14,
-      "max_score": 14,
+      "score": 13,
+      "max_score": 13,
       "passed": true,
       "checks": [
         {
-          "name": "required_term:whoami.sh",
+          "name": "required_term:AGMSG_OUTDATED",
           "passed": true
         },
         {
-          "name": "required_term:send.sh",
+          "name": "required_term:1.1.8",
           "passed": true
         },
         {
@@ -481,27 +497,19 @@
           "passed": true
         },
         {
+          "name": "required_term:explicit approval",
+          "passed": true
+        },
+        {
+          "name": "required_term:npx agmsg",
+          "passed": true
+        },
+        {
           "name": "required_term:read-only",
           "passed": true
         },
         {
-          "name": "required_term:JSONL",
-          "passed": true
-        },
-        {
-          "name": "required_term:no network",
-          "passed": true
-        },
-        {
           "name": "required_term:not an Anthropic API",
-          "passed": true
-        },
-        {
-          "name": "required_term:job_id",
-          "passed": true
-        },
-        {
-          "name": "required_term:dry-run",
           "passed": true
         },
         {
@@ -521,11 +529,15 @@
           "passed": true
         },
         {
-          "name": "required_regex:(?i)(fresh|official).*(work|supported|compatible)",
+          "name": "forbidden_term:run npx agmsg without approval",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(stop|停止).*(approval|承認)",
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-official-agmsg-compatibility.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-official-agmsg-compatibility.md"
     },
     {
       "id": "validation-workspace-read",
@@ -591,7 +603,7 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-workspace-read.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-workspace-read.md"
     },
     {
       "id": "validation-stale-tools-running-grounding",
@@ -601,7 +613,7 @@
       "passed": true,
       "checks": [
         {
-          "name": "required_term:0.2.1",
+          "name": "required_term:0.3.0",
           "passed": true
         },
         {
@@ -673,7 +685,7 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-stale-tools-running-grounding.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-stale-tools-running-grounding.md"
     },
     {
       "id": "validation-update-backup-isolation",
@@ -683,7 +695,7 @@
       "passed": true,
       "checks": [
         {
-          "name": "required_term:0.2.1",
+          "name": "required_term:0.3.0",
           "passed": true
         },
         {
@@ -731,7 +743,85 @@
           "passed": true
         }
       ],
-      "output_path": "runs/candidate/validation-update-backup-isolation.md"
+      "output_path": "evals/oss-readiness/runs/candidate/validation-update-backup-isolation.md"
+    },
+    {
+      "id": "validation-first-device-bootstrap",
+      "split": "validation",
+      "score": 17,
+      "max_score": 17,
+      "passed": true,
+      "checks": [
+        {
+          "name": "required_term:./install.sh",
+          "passed": true
+        },
+        {
+          "name": "required_term:before",
+          "passed": true
+        },
+        {
+          "name": "required_term:Python 3.9",
+          "passed": true
+        },
+        {
+          "name": "required_term:doctor",
+          "passed": true
+        },
+        {
+          "name": "required_term:CLAUDE_BIN_OUTSIDE_PATH",
+          "passed": true
+        },
+        {
+          "name": "required_term:AGMSG_OUTDATED",
+          "passed": true
+        },
+        {
+          "name": "required_term:1.1.8",
+          "passed": true
+        },
+        {
+          "name": "required_term:explicit approval",
+          "passed": true
+        },
+        {
+          "name": "required_term:npx agmsg",
+          "passed": true
+        },
+        {
+          "name": "required_term:no model",
+          "passed": true
+        },
+        {
+          "name": "required_term:no API fallback",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Python 3.10+",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:leave the Skill uninstalled",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:automatically run npx agmsg",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:fall back to an API",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(install|インストール).*(Skill).*(before|先).*(agmsg|runtime|dependency|依存)",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(doctor).*(does not|never|no|行わ).*(change|modify|send|invoke|変更|送信|実行)",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/oss-readiness/runs/candidate/validation-first-device-bootstrap.md"
     }
   ]
 }

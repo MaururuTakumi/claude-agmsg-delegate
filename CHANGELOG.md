@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-07-21
+
+- Install the offline Codex Skill before stopping for Claude or agmsg runtime setup.
+- Support and continuously test Python 3.9, including stock macOS Python 3.9.6.
+- Discover Claude Code deterministically from PATH and standard local install paths,
+  then pin the resolved absolute path for detached workers.
+- Add a non-mutating `doctor` command with stable issue codes for Skill,
+  Python, Claude subscription authentication, agmsg, and local path readiness.
+- Diagnose pre-1.1.8 agmsg installs that lack official `api.sh` separately from
+  missing, non-executable, legacy, and alternate-path installations.
+
 ## 0.2.1 — 2026-07-20
 
 - Move update backups outside Codex's `skills/` discovery directory.

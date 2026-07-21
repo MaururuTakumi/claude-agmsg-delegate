@@ -1,6 +1,6 @@
 Read,Glob,Grep is the expected advisory policy. The copied toolsなし rule is
 stale 0.1 guidance, so do not switch Fable to tool-free or ask for a one-off
-permission exception. Verify `delegate_claude.py --version` reports 0.2.1 and
+permission exception. Verify `delegate_claude.py --version` reports 0.3.0 and
 the dry-run reports contract_version=2. If not, update, reinstall the Skill, and
 restart Codex.
 

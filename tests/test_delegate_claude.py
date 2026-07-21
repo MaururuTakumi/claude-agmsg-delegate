@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -265,6 +266,31 @@ class DelegateTests(unittest.TestCase):
         result = subprocess.run(command, text=True, capture_output=True, env=env or self.env, timeout=10)
         return result, json.loads(result.stdout)
 
+    def doctor_command(self, codex_home: Path | None = None) -> list[str]:
+        selected_home = codex_home or self.base / "codex-home"
+        skill = selected_home / "skills" / "claude-agmsg-delegate"
+        skill.mkdir(parents=True, exist_ok=True)
+        (skill / "SKILL.md").write_text(
+            "---\nname: claude-agmsg-delegate\ndescription: test fixture\n---\n",
+            encoding="utf-8",
+        )
+        (skill / "VERSION").write_text((ROOT / "VERSION").read_text(), encoding="utf-8")
+        return [
+            sys.executable,
+            str(SCRIPT),
+            "doctor",
+            "--project",
+            str(ROOT),
+            "--agmsg-dir",
+            str(self.agmsg),
+            "--state-dir",
+            str(self.state),
+            "--codex-home",
+            str(selected_home),
+            "--claude-bin",
+            str(self.claude),
+        ]
+
     def test_version_matches_distribution_marker(self) -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--version"],
@@ -275,6 +301,13 @@ class DelegateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), (ROOT / "VERSION").read_text().strip())
 
+    def test_documented_versions_match_distribution_marker(self) -> None:
+        expected = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        for name in ("README.md", "README.ja.md", "AGENTS.md", "SKILL.md", "llms.txt"):
+            contents = (ROOT / name).read_text(encoding="utf-8")
+            versions = set(re.findall(r"\b0\.\d+\.\d+\b", contents))
+            self.assertEqual(versions, {expected}, f"stale documented version in {name}")
+
     def test_dry_run_checks_subscription_without_model_or_agmsg_side_effects(self) -> None:
         invocation_log = self.base / "invocations.jsonl"
         env = self.env.copy()
@@ -282,7 +315,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
-        self.assertEqual(payload["delegate_version"], "0.2.1")
+        self.assertEqual(payload["delegate_version"], "0.3.0")
         self.assertEqual(payload["contract_version"], 2)
         self.assertEqual(payload["agmsg_reader"], "api.sh")
         self.assertEqual(
@@ -305,6 +338,111 @@ class DelegateTests(unittest.TestCase):
         self.assertFalse(self.state.exists())
         self.assertFalse(invocation_log.exists())
 
+    def test_doctor_reports_healthy_setup_without_mutation(self) -> None:
+        result, payload = self.run_json(self.doctor_command())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["delegate_version"], "0.3.0")
+        self.assertEqual(payload["contract_version"], 2)
+        self.assertFalse(payload["mutating"])
+        self.assertFalse(payload["model_invoked"])
+        self.assertFalse(payload["network_required"])
+        self.assertEqual(payload["issues"], [])
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_doctor_identifies_uninstalled_skill_outdated_agmsg_and_off_path_claude(self) -> None:
+        (self.agmsg / "scripts" / "api.sh").unlink()
+        (self.agmsg / "VERSION").write_text("1.1.7\n", encoding="utf-8")
+        fake_home = self.base / "fresh-home"
+        local_bin = fake_home / ".local" / "bin"
+        local_bin.mkdir(parents=True)
+        discovered_claude = local_bin / "claude"
+        discovered_claude.write_text(FAKE_CLAUDE, encoding="utf-8")
+        discovered_claude.chmod(0o755)
+        codex_home = fake_home / ".codex"
+        command = self.doctor_command(codex_home)
+        skill = codex_home / "skills" / "claude-agmsg-delegate"
+        for child in skill.iterdir():
+            child.unlink()
+        skill.rmdir()
+        command[command.index("--claude-bin"):command.index("--claude-bin") + 2] = []
+        env = self.env.copy()
+        env["HOME"] = str(fake_home)
+        env["PATH"] = "/usr/bin:/bin"
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(payload["status"], "issues")
+        codes = {item["code"] for item in payload["issues"]}
+        self.assertIn("SKILL_NOT_INSTALLED", codes)
+        self.assertIn("AGMSG_OUTDATED", codes)
+        self.assertIn("CLAUDE_BIN_OUTSIDE_PATH", codes)
+        claude_check = next(item for item in payload["checks"] if item["name"] == "claude_binary")
+        self.assertEqual(claude_check["path"], str(discovered_claude.resolve()))
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_doctor_accepts_legacy_reader_with_warning(self) -> None:
+        scripts = self.agmsg / "scripts"
+        (scripts / "api.sh").unlink()
+        legacy = scripts / "list-ids.sh"
+        legacy.write_text(LIST_IDS_SH, encoding="utf-8")
+        legacy.chmod(0o755)
+        result, payload = self.run_json(self.doctor_command())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["status"], "ok")
+        issues = {item["code"]: item for item in payload["issues"]}
+        self.assertEqual(issues["AGMSG_LEGACY_READER"]["severity"], "warning")
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_doctor_reports_alternate_agmsg_without_switching(self) -> None:
+        fake_home = self.base / "alternate-home"
+        alternate_scripts = fake_home / ".agents" / "skills" / "agmsg" / "scripts"
+        alternate_scripts.mkdir(parents=True)
+        for name, body in {"send.sh": SEND_SH, "api.sh": API_SH, "whoami.sh": WHOAMI_SH}.items():
+            path = alternate_scripts / name
+            path.write_text(body, encoding="utf-8")
+            path.chmod(0o755)
+        selected = self.base / "missing-agmsg"
+        command = self.doctor_command()
+        command[command.index("--agmsg-dir") + 1] = str(selected)
+        env = self.env.copy()
+        env["HOME"] = str(fake_home)
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        issues = {item["code"]: item for item in payload["issues"]}
+        self.assertIn("AGMSG_NOT_INSTALLED", issues)
+        self.assertIn("AGMSG_ALTERNATE_INSTALL_FOUND", issues)
+        self.assertEqual(
+            issues["AGMSG_ALTERNATE_INSTALL_FOUND"]["evidence"]["alternates"],
+            [str(alternate_scripts.parent.resolve())],
+        )
+        selected_check = next(item for item in payload["checks"] if item["name"] == "agmsg")
+        self.assertEqual(selected_check["path"], str(selected))
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_run_discovers_claude_outside_path_and_pins_absolute_path(self) -> None:
+        fake_home = self.base / "discovery-home"
+        local_bin = fake_home / ".local" / "bin"
+        local_bin.mkdir(parents=True)
+        discovered_claude = local_bin / "claude"
+        discovered_claude.write_text(FAKE_CLAUDE, encoding="utf-8")
+        discovered_claude.chmod(0o755)
+        command = self.command("--dry-run")
+        index = command.index("--claude-bin")
+        del command[index:index + 2]
+        env = self.env.copy()
+        env["HOME"] = str(fake_home)
+        env["PATH"] = "/usr/bin:/bin"
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["claude_bin"], str(discovered_claude.resolve()))
+        self.assertTrue(payload["claude_outside_path"])
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
     def test_inferred_route_uses_headless_delegate_mailboxes(self) -> None:
         command = self.command("--dry-run")
         for option in ["--team", "--from-agent", "--to-agent"]:
@@ -324,7 +462,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--timeout", "5"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "completed")
-        self.assertEqual(payload["delegate_version"], "0.2.1")
+        self.assertEqual(payload["delegate_version"], "0.3.0")
         self.assertEqual(payload["contract_version"], 2)
         self.assertTrue(payload["workspace_grounded"])
         self.assertEqual(payload["files_read"], ["README.md"])
@@ -547,7 +685,7 @@ class DelegateTests(unittest.TestCase):
         state = {
             "job_id": job_id,
             "status": "running",
-            "delegate_version": "0.2.1",
+            "delegate_version": "0.3.0",
             "contract_version": 2,
             "model": "fable",
             "role": "reviewer",

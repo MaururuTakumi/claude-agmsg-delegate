@@ -1,6 +1,5 @@
-A fresh official agmsg 1.1.7 installation is supported. The wrapper uses
-whoami.sh for identity, send.sh to submit the envelope, and official api.sh as
-the local read-only JSONL reader. It correlates the returned request and reply by
-the unique job_id. api.sh reads the local agmsg store with no network and is not an Anthropic API, so that read does not invoke a model or create model billing.
-The installation dry-run validates this transport without sending a job or
-running Fable or Sonnet.
+This is AGMSG_OUTDATED: agmsg 1.1.7 predates the official api.sh, which is
+included in official agmsg 1.1.8 and newer. Do not invent or require
+list-ids.sh. Stop before delegation and request explicit approval before
+running npx agmsg, joining a team, or choosing delivery mode. After the
+approved update, api.sh is the local read-only JSONL reader; it is not an Anthropic API and does not create model billing.
