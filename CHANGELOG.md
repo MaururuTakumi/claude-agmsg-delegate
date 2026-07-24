@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 0.4.1 — 2026-07-24
+
+- Clarify that agmsg transports task/result envelopes while the local headless
+  Claude Code process performs restricted workspace reads through the verified
+  Claude.ai subscription.
+- Treat an explicit Fable workspace-review request or approved private-workspace
+  packet as sufficient authorization for one bounded read, without a duplicate
+  generic consent loop.
+- Map "same permissions as Codex" to Fable's existing read-only policy rather
+  than rejecting the delegation or expanding permissions.
+- Require concrete `delegate_claude.py` error evidence before claiming that a
+  safety mechanism or platform rejected a request.
+- Add SkillOpt regression coverage for the observed SG0 approval-loop failure,
+  stale runtime handling, permission mapping, and rejection evidence.
+
+## 0.4.0 — 2026-07-24
+
+- Add an explicit Fable `--github-issue` input path backed by the device's
+  authenticated `gh issue view` command.
+- Keep delegated Claude on `Read,Glob,Grep` with no Bash, inherited settings,
+  GitHub credentials, or write-capable GitHub tools.
+- Add safe-context confirmation, common-secret rejection, author-identity
+  omission, reference/count/size limits, and untrusted-context framing.
+- Preserve dry-run's no-network guarantee: Issue references are validated and
+  declared but not fetched.
+- Add fixture coverage for Issue ingestion, token-environment isolation,
+  secret rejection, and unchanged Fable tool permissions.
+
 ## 0.3.1 — 2026-07-24
 
 - Add an explicit permission matrix clarifying that Fable is hard read-only,

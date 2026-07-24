@@ -15,7 +15,7 @@ AI install sequence:
 5. Change to the target project where delegation will be used and run the installed `delegate_claude.py doctor`; never join the temporary Skill clone merely to pass verification. Doctor is non-mutating and checks Python, Skill installation, standard Claude locations, subscription auth, and agmsg. Official agmsg 1.1.8+ includes local read-only `api.sh`; a legacy `list-ids.sh` installation is accepted but never required.
 6. If agmsg is missing or outdated, stop and get explicit approval before `npx agmsg`, team join, or delivery-mode setup. After approval, use only `whoami.sh`, `join.sh`, and `delivery.sh` from the target project. With no existing team, propose `<target-project-name>-team / codex` and wait for confirmation. Offer only `1) turn` (recommended; Enter means turn) or `2) off`; never select `monitor` or `both`. Never silently create or edit agmsg files directly.
 7. Restart Codex and start a new task so the pre-update Skill cannot remain cached.
-8. Verify `delegate_claude.py --version` is `0.3.1`, then run delegate_claude.py run --model fable --task "Installation verification only." --dry-run and require `contract_version=2`.
+8. Verify `delegate_claude.py --version` is `0.4.1`, then run delegate_claude.py run --model fable --task "Installation verification only." --dry-run and require `contract_version=3`.
 9. Doctor and dry-run may execute local read-only `claude auth status --json`, but must not send agmsg or invoke a model.
 
 Safety invariants:
