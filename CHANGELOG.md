@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.1 — 2026-07-24
+
+- Add an explicit permission matrix clarifying that Fable is hard read-only,
+  advisory Sonnet is read-only, and only an explicitly authorized Sonnet
+  implementer may edit through `--workspace-write`.
+- Clarify that a role label never grants write authority, Fable workspace-write
+  requests stop before agmsg send, and Bash remains unavailable in every mode.
+- Add regression coverage for Fable carrying the `implementer` role without
+  gaining write access.
+
 ## 0.3.0 — 2026-07-21
 
 - Install the offline Codex Skill before stopping for Claude or agmsg runtime setup.

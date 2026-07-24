@@ -315,7 +315,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
-        self.assertEqual(payload["delegate_version"], "0.3.0")
+        self.assertEqual(payload["delegate_version"], "0.3.1")
         self.assertEqual(payload["contract_version"], 2)
         self.assertEqual(payload["agmsg_reader"], "api.sh")
         self.assertEqual(
@@ -342,7 +342,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.doctor_command())
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["delegate_version"], "0.3.0")
+        self.assertEqual(payload["delegate_version"], "0.3.1")
         self.assertEqual(payload["contract_version"], 2)
         self.assertFalse(payload["mutating"])
         self.assertFalse(payload["model_invoked"])
@@ -462,7 +462,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--timeout", "5"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "completed")
-        self.assertEqual(payload["delegate_version"], "0.3.0")
+        self.assertEqual(payload["delegate_version"], "0.3.1")
         self.assertEqual(payload["contract_version"], 2)
         self.assertTrue(payload["workspace_grounded"])
         self.assertEqual(payload["files_read"], ["README.md"])
@@ -540,6 +540,16 @@ class DelegateTests(unittest.TestCase):
         self.assertNotIn("Write", invocation[tools_index + 1])
         self.assertNotIn("Bash", invocation[tools_index + 1])
 
+    def test_fable_implementer_role_remains_read_only_without_workspace_write(self) -> None:
+        command = self.command("--role", "implementer", "--timeout", "5")
+        result, payload = self.run_json(command)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["role"], "implementer")
+        self.assertEqual(payload["execution_mode"], "workspace_read")
+        self.assertEqual(payload["tools"], ["Read", "Glob", "Grep"])
+        self.assertEqual(payload["permission_mode"], "plan")
+        self.assertFalse(payload["review_required"])
+
     def test_sonnet_workspace_write_edits_git_workspace_and_requires_review(self) -> None:
         project = self.base / "write-project"
         project.mkdir()
@@ -574,10 +584,13 @@ class DelegateTests(unittest.TestCase):
         self.assertNotIn("--dangerously-skip-permissions", invocation)
 
     def test_workspace_write_rejects_non_sonnet_or_non_git_project_before_send(self) -> None:
-        result, payload = self.run_json(self.command("--workspace-write", "--dry-run"))
+        result, payload = self.run_json(
+            self.command("--role", "implementer", "--workspace-write", "--dry-run")
+        )
         self.assertEqual(result.returncode, 2)
         self.assertIn("requires --model sonnet", payload["error"])
         self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
 
         non_git = self.base / "not-git"
         non_git.mkdir()
@@ -685,7 +698,7 @@ class DelegateTests(unittest.TestCase):
         state = {
             "job_id": job_id,
             "status": "running",
-            "delegate_version": "0.3.0",
+            "delegate_version": "0.3.1",
             "contract_version": 2,
             "model": "fable",
             "role": "reviewer",

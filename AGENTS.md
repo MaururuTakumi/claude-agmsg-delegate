@@ -62,7 +62,7 @@ Do these in order before proposing changes or installing anything:
    This dry-run may execute the read-only local `claude auth status --json`
    command. It must not send agmsg, create job state, or run a model.
 
-10. Require delegate version `0.3.0` and `contract_version=2`, then report the resolved Claude binary, team, sender, receiver, model,
+10. Require delegate version `0.3.1` and `contract_version=2`, then report the resolved Claude binary, team, sender, receiver, model,
    `billing_mode: subscription`, paid `subscription_type`, execution mode,
    tool allowlist, and review requirement.
 
@@ -102,6 +102,9 @@ do not invoke Fable or Sonnet during dependency installation or verification.
   `Read,Glob,Grep` with `--permission-mode plan`. An explicit Sonnet implementer
   workspace-write job may use only `Read,Edit,Write,Glob,Grep` with
   `--permission-mode acceptEdits` there.
+- A role label does not grant write authority. Fable is hard read-only even when
+  labeled `implementer`; Fable workspace-write requests stop before agmsg send.
+  Only `--model sonnet --role implementer --workspace-write` enables file edits.
 - The runtime prompt requires at least one relevant `Read` call. Claude Code
   runs with verbose `stream-json`; the wrapper accepts a result only when it
   observes project-contained Read evidence and returns project-relative
