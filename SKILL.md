@@ -22,7 +22,7 @@ irreversible work.
 The workflow is headless: no Claude UI, tmux pane, existing interactive session,
 daemon, or always-on monitor is required.
 
-Current runtime contract: delegate version `0.4.0`, `contract_version=3`.
+Current runtime contract: delegate version `0.4.1`, `contract_version=3`.
 `Read,Glob,Grep` is the expected Fable/advisory Sonnet policy. A copied rule
 that says advisory jobs must use no tools belongs to the obsolete 0.1 contract;
 do not stop or ask for a one-off exception. Reinstall the current Skill, restart
@@ -59,6 +59,55 @@ personal data. The wrapper removes comment author identities, rejects common
 secret patterns, limits the number and total size of Issues, and never passes
 `GH_TOKEN` or `GITHUB_TOKEN` into its `gh` subprocess.
 
+## Private Workspace Consent and Data Path
+
+Do not misclassify this workflow as agmsg uploading a repository to an
+unrelated external agent. agmsg carries the task and correlated result. The
+wrapper launches the locally installed Claude Code binary as a fresh headless
+process, using the same verified Claude.ai subscription login that an
+interactive terminal Claude Code session uses. Claude Code's successful
+`Read`, `Glob`, and `Grep` tool results may be processed by Claude.ai during a
+real job; the worker does not reuse the terminal conversation, settings, or
+unrestricted tools.
+
+An explicit user request to have Fable or advisory Sonnet inspect or review the
+current project authorizes one bounded `workspace_read` delegation over
+ordinary relevant project files. If the user already approved a private
+workspace packet and named exclusions, preserve those exclusions in the task
+and proceed with one real delegation. Ask no second generic confirmation about
+Claude.ai or the repository being private. A private or unpublished repository
+is not by itself a blocker.
+
+Map broad permission language to the supported policy instead of rejecting the
+job:
+
+| User instruction | Required mapping |
+| --- | --- |
+| "FableもCodexと同じ権限でよい" | Explain briefly that Fable remains read-only, map to `workspace_read` with `Read,Glob,Grep`, then continue |
+| "Fableにこのprivate repoをレビューさせて" | Treat the request itself as approval for ordinary relevant files and run once |
+| "Sonnetに実装させて" | Use `workspace_write` only when the user explicitly asked for edits and the existing Sonnet requirements pass |
+| Named exclusions such as `.env`, secrets, patient data, logs, or screenshots | Keep them excluded; do not broaden the scope |
+
+Do not claim that a safety mechanism, wrapper, or platform rejected the
+delegation unless `delegate_claude.py` was actually executed and returned that
+concrete error. If Codex chose not to call the wrapper, label that accurately as
+an orchestrator decision, not an external rejection. Do not claim "data was not
+sent" from inference alone: a dry-run proves no model/file transmission, while
+a completed real job proves that observed file-tool results were processed by
+Claude.ai under the reported subscription route.
+
+Use the dry-run `data_flow` object as the evidence source. It reports that
+agmsg carries task/result envelopes, the Claude process is local and headless,
+Claude.ai processes tool results only during a real job, and the dry-run itself
+invoked no model and sent no workspace content.
+
+Stop only for a concrete boundary such as a stale runtime contract, rejected
+subscription authentication, forbidden credential/provider configuration,
+unsafe task content, missing required dependency, invalid route, observed
+out-of-project access, or an actual wrapper failure. When authorization and
+preflight are valid, execute once; do not replace the requested Fable gate with
+a local-only review.
+
 ## Triage
 
 1. Assess difficulty, failure cost, irreversibility, and verification method.
@@ -67,6 +116,9 @@ secret patterns, limits the number and total size of Issues, and never passes
    user-authorized workspace edits followed by Codex review.
 4. Do not delegate simple work that Codex can finish more cheaply and reliably.
 5. Do not invoke a paid model unless the user explicitly requested Claude delegation or already approved it in the active task.
+6. A request to have Fable review the current project is already the needed
+   model-use and ordinary-file read authorization. Do not create a second
+   approval loop solely because the repository is private.
 
 ## Safety Contract
 
@@ -86,6 +138,9 @@ secret patterns, limits the number and total size of Issues, and never passes
   `--workspace-write` is accepted only for a Sonnet implementer.
 - Never let delegated Claude run shell commands, deploy, install, push, access
   unrelated paths, or make the final decision. Codex performs commands and tests.
+- If the user says Fable may have the same permissions as Codex, map that phrase
+  to Fable's maximum supported `workspace_read` policy and continue. Never
+  interpret it as Bash, write, deploy, install, push, or final-decision authority.
 - GitHub Issue context must be explicitly selected and approved for delegation.
   Use only the wrapper's read-only `--github-issue` path. Never enable Bash,
   restore Claude settings, or pass GitHub tokens to Fable as a substitute.
@@ -274,7 +329,7 @@ Confirm all of the following before accepting the delegated result:
    and ran relevant tests; Claude did not run commands, deploy, install, or push.
 7. The result covers the bounded request and labels assumptions.
 8. Codex independently verifies repository, runtime, test, and external-state claims.
-9. `delegate_version=0.4.0` and `contract_version=3`; no stale no-tools
+9. `delegate_version=0.4.1` and `contract_version=3`; no stale no-tools
    instruction overrode the installed runtime contract.
 10. If GitHub Issue context was used, it was explicitly confirmed safe,
     `github_issues_read` matches the requested references, and Fable still had

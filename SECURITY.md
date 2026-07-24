@@ -34,6 +34,14 @@ This project intentionally:
 - rechecks authentication after inference and discards output if the route changed;
 - runs headlessly without requiring a Claude UI, tmux session, daemon, or monitor.
 
+agmsg carries task and result envelopes; it does not upload a repository.
+During a real job, the local Claude Code process may send successful file-tool
+results to Claude.ai under the verified subscription route. This is the same
+service boundary as using terminal Claude Code on the project, with a narrower
+tool and settings policy. An explicit workspace-review request authorizes one
+bounded ordinary-file read, but never overrides named exclusions or the secret,
+credential, private-key, and unnecessary-personal-data prohibitions.
+
 Workspace-write mode does not expose Bash and does not authorize install,
 deploy, push, or unrelated-path access. Users remain responsible for reviewing
 delegated prompts, outputs, and actual Git diffs; running relevant tests;

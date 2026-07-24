@@ -1,0 +1,161 @@
+{
+  "summary": {
+    "score": 1,
+    "max_score": 23,
+    "rate": 0.043478260869565216,
+    "cases": 4,
+    "passed_cases": 0,
+    "by_split": {
+      "train": {
+        "score": 1,
+        "max_score": 13,
+        "cases": 2,
+        "passed_cases": 0,
+        "rate": 0.07692307692307693,
+        "case_pass_rate": 0.0
+      },
+      "validation": {
+        "score": 0,
+        "max_score": 10,
+        "cases": 2,
+        "passed_cases": 0,
+        "rate": 0.0,
+        "case_pass_rate": 0.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "approved-private-read",
+      "split": "train",
+      "score": 1,
+      "max_score": 7,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:proceed",
+          "passed": false
+        },
+        {
+          "name": "required_term:one real delegation",
+          "passed": false
+        },
+        {
+          "name": "required_term:Read,Glob,Grep",
+          "passed": false
+        },
+        {
+          "name": "required_term:no second confirmation",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:cannot continue",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:safety mechanism prohibited",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:local internal review instead",
+          "passed": false
+        }
+      ],
+      "output_path": "evals/private-workspace-consent-v041/runs/baseline/approved-private-read.md"
+    },
+    {
+      "id": "same-permissions-mapping",
+      "split": "train",
+      "score": 0,
+      "max_score": 6,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:map",
+          "passed": false
+        },
+        {
+          "name": "required_term:Fable remains read-only",
+          "passed": false
+        },
+        {
+          "name": "required_term:workspace_read",
+          "passed": false
+        },
+        {
+          "name": "required_term:continue",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:cannot use Fable",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:stop",
+          "passed": false
+        }
+      ],
+      "output_path": "evals/private-workspace-consent-v041/runs/baseline/same-permissions-mapping.md"
+    },
+    {
+      "id": "claimed-safety-rejection",
+      "split": "validation",
+      "score": 0,
+      "max_score": 5,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:actual delegate_claude.py error",
+          "passed": false
+        },
+        {
+          "name": "required_term:must not claim",
+          "passed": false
+        },
+        {
+          "name": "required_term:orchestrator",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:safety mechanism rejected the request",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:data was not sent",
+          "passed": false
+        }
+      ],
+      "output_path": "evals/private-workspace-consent-v041/runs/baseline/claimed-safety-rejection.md"
+    },
+    {
+      "id": "stale-runtime-contract",
+      "split": "validation",
+      "score": 0,
+      "max_score": 5,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:0.4.1",
+          "passed": false
+        },
+        {
+          "name": "required_term:contract_version=3",
+          "passed": false
+        },
+        {
+          "name": "required_term:restart Codex",
+          "passed": false
+        },
+        {
+          "name": "required_term:new task",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:continue with 0.2.1",
+          "passed": false
+        }
+      ],
+      "output_path": "evals/private-workspace-consent-v041/runs/baseline/stale-runtime-contract.md"
+    }
+  ]
+}

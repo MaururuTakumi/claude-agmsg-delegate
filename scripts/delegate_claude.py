@@ -44,7 +44,7 @@ GITHUB_ISSUE_NUMBER_RE = re.compile(r"^#?([1-9][0-9]*)$")
 PAID_SUBSCRIPTION_TYPES = {"pro", "max", "team", "enterprise"}
 WORKSPACE_READ_TOOLS = ["Read", "Glob", "Grep"]
 WORKSPACE_WRITE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"]
-DELEGATE_VERSION = "0.4.0"
+DELEGATE_VERSION = "0.4.1"
 CONTRACT_VERSION = 3
 MAX_GITHUB_ISSUES = 5
 MAX_GITHUB_CONTEXT_CHARS = 60000
@@ -1589,6 +1589,14 @@ def run_main(args: argparse.Namespace) -> int:
                 "claude_outside_path": claude_outside_path,
                 "claude_searched": claude_searched,
                 "gh_bin": gh_bin,
+                "data_flow": {
+                    "agmsg_transports": "task_and_result_envelopes",
+                    "repository_uploaded_by_agmsg": False,
+                    "claude_process": "local_headless",
+                    "real_job_tool_results_processed_by": "claude.ai",
+                    "current_run_model_invoked": False,
+                    "current_run_workspace_content_sent": False,
+                },
                 "request": request,
                 "claude_policy": {
                     "safe_mode": True,

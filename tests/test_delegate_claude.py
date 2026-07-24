@@ -345,6 +345,22 @@ class DelegateTests(unittest.TestCase):
             versions = set(re.findall(r"\b0\.\d+\.\d+\b", contents))
             self.assertEqual(versions, {expected}, f"stale documented version in {name}")
 
+    def test_skill_defines_private_workspace_consent_and_rejection_evidence(self) -> None:
+        contents = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        normalized = re.sub(r"\s+", " ", contents)
+        for required in [
+            "agmsg carries the task and correlated result",
+            "authorizes one bounded `workspace_read` delegation",
+            "Ask no second generic confirmation",
+            "A private or unpublished repository is not by itself a blocker",
+            "map to `workspace_read` with `Read,Glob,Grep`, then continue",
+            "unless `delegate_claude.py` was actually executed",
+            "label that accurately as an orchestrator decision",
+            "do not replace the requested Fable gate with a local-only review",
+        ]:
+            with self.subTest(required=required):
+                self.assertIn(required, normalized)
+
     def test_dry_run_checks_subscription_without_model_or_agmsg_side_effects(self) -> None:
         invocation_log = self.base / "invocations.jsonl"
         env = self.env.copy()
@@ -352,9 +368,20 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
-        self.assertEqual(payload["delegate_version"], "0.4.0")
+        self.assertEqual(payload["delegate_version"], "0.4.1")
         self.assertEqual(payload["contract_version"], 3)
         self.assertEqual(payload["agmsg_reader"], "api.sh")
+        self.assertEqual(
+            payload["data_flow"],
+            {
+                "agmsg_transports": "task_and_result_envelopes",
+                "repository_uploaded_by_agmsg": False,
+                "claude_process": "local_headless",
+                "real_job_tool_results_processed_by": "claude.ai",
+                "current_run_model_invoked": False,
+                "current_run_workspace_content_sent": False,
+            },
+        )
         self.assertEqual(
             payload["claude_policy"],
             {
@@ -518,7 +545,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.doctor_command())
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["delegate_version"], "0.4.0")
+        self.assertEqual(payload["delegate_version"], "0.4.1")
         self.assertEqual(payload["contract_version"], 3)
         self.assertFalse(payload["mutating"])
         self.assertFalse(payload["model_invoked"])
@@ -638,7 +665,7 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--timeout", "5"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "completed")
-        self.assertEqual(payload["delegate_version"], "0.4.0")
+        self.assertEqual(payload["delegate_version"], "0.4.1")
         self.assertEqual(payload["contract_version"], 3)
         self.assertTrue(payload["workspace_grounded"])
         self.assertEqual(payload["files_read"], ["README.md"])
@@ -874,7 +901,7 @@ class DelegateTests(unittest.TestCase):
         state = {
             "job_id": job_id,
             "status": "running",
-            "delegate_version": "0.4.0",
+            "delegate_version": "0.4.1",
             "contract_version": 3,
             "model": "fable",
             "role": "reviewer",

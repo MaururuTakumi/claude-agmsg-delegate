@@ -40,6 +40,32 @@ device `gh` CLI and supplies a bounded context snapshot. Fable still receives
 only `Read,Glob,Grep`; it never receives Bash, GitHub credentials, user settings,
 or write-capable GitHub tools.
 
+### Private repositories and consent
+
+agmsg transports the task and correlated result; it does not upload the
+repository. For a real job, the wrapper starts the locally installed Claude Code
+binary in a fresh restricted process using the verified Claude.ai subscription.
+Relevant `Read`, `Glob`, and `Grep` results may therefore be processed by
+Claude.ai, just as when the user runs terminal Claude Code on that project.
+The headless worker does not inherit the terminal conversation, user settings,
+Bash, or unrestricted permissions.
+
+An explicit request to have Fable review the current project is sufficient
+authorization for one bounded read of ordinary relevant project files. If the
+user approved a private-workspace packet with exclusions, preserve those
+exclusions and proceed without asking for another generic external-provider
+confirmation. Saying "Fable may have the same permissions as Codex" maps to
+Fable's maximum supported `workspace_read` policy; it never adds write or shell
+authority.
+
+Codex must not claim that a safety mechanism rejected the request unless
+`delegate_claude.py` actually returned that error. If the wrapper was not
+called, that is an orchestrator decision, not evidence of an external rejection.
+Dry-run returns a machine-readable `data_flow` object showing that agmsg carries
+task/result envelopes, the Claude process is local and headless, real-job tool
+results are processed by Claude.ai, and the dry-run itself sent no workspace
+content.
+
 ## Give this repository to your AI
 
 Paste this into Codex or another coding agent:
@@ -55,7 +81,7 @@ Before the final Skill dry-run, verify that ~/.agents/skills/agmsg/scripts/whoam
 If agmsg is missing or outdated, stop and ask me for explicit approval before running npx agmsg, joining a team, or choosing a delivery mode. Do not guess those settings or edit agmsg files directly.
 After I approve, install agmsg and change to the target project where delegation will be used. If no teams exist, propose <target-project-name>-team and codex, show both, and wait for my confirmation before join.sh. Ask for delivery separately: recommend 1) turn, allow 2) off, and never choose monitor or both. Empty input or Enter means turn. Use only the provided whoami.sh, join.sh, and delivery.sh procedures. Do not join the temporary Skill clone just to pass verification. Then resume the final dry-run from the target project without invoking a Claude model.
 Do not run a Claude model or spend model usage during installation.
-Verify delegate_claude.py --version is 0.4.0.
+Verify delegate_claude.py --version is 0.4.1.
 Verify the installation with delegate_claude.py --dry-run; this may run the local read-only `claude auth status --json` check, but must not send an agmsg job or run model inference.
 Report the resolved route, subscription-only policy, execution mode, tool allowlist, and review requirement. Never display or forward Claude CLI monetary usage estimates.
 ```
@@ -214,7 +240,7 @@ Sonnet workspace implementation adds `--tools "Read,Edit,Write,Glob,Grep"
 --permission-mode acceptEdits`. Neither mode enables Bash or a permission
 bypass.
 
-Version `0.4.0` uses runtime `contract_version=3`. It requires at least one
+Version `0.4.1` uses runtime `contract_version=3`. It requires at least one
 observed `Read` tool event before accepting a Fable or Sonnet result. The wrapper
 returns `workspace_grounded=true` and project-relative `files_read`; a missing
 Read event or an observed path outside the selected project discards the result.
@@ -309,7 +335,7 @@ Completed result:
 {
   "job_id": "cad-sonnet-20260715T024848Z-a1b2c3",
   "status": "completed",
-  "delegate_version": "0.4.0",
+  "delegate_version": "0.4.1",
   "contract_version": 3,
   "requested_model": "sonnet",
   "actual_model": "claude-sonnet-5",
@@ -451,7 +477,7 @@ python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --versi
 
 The installer migrates its old `claude-agmsg-delegate.backup-*` directories
 outside `skills/` and stops if an unrelated same-name copy remains. The expected
-version is `0.4.0`. Restart Codex and start a new task; an already-running task
+version is `0.4.1`. Restart Codex and start a new task; an already-running task
 may retain the Skill instructions it loaded before the update.
 
 ### `subscription-only policy blocked ...`
@@ -530,7 +556,7 @@ exception. Update and reinstall the Skill, restart Codex, then verify:
 python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
 ```
 
-The expected version is `0.4.0`; dry-run reports `contract_version: 3`. A real
+The expected version is `0.4.1`; dry-run reports `contract_version: 3`. A real
 completed job must also report `workspace_grounded: true` and non-empty
 project-relative `files_read`. A dry-run alone never proves that files were read.
 
