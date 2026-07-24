@@ -1,0 +1,175 @@
+{
+  "summary": {
+    "score": 14,
+    "max_score": 29,
+    "rate": 0.4827586206896552,
+    "cases": 3,
+    "passed_cases": 0,
+    "by_split": {
+      "train": {
+        "score": 9,
+        "max_score": 18,
+        "cases": 2,
+        "passed_cases": 0,
+        "rate": 0.5,
+        "case_pass_rate": 0.0
+      },
+      "validation": {
+        "score": 5,
+        "max_score": 11,
+        "cases": 1,
+        "passed_cases": 0,
+        "rate": 0.45454545454545453,
+        "case_pass_rate": 0.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "permission-overview",
+      "split": "train",
+      "score": 6,
+      "max_score": 9,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:Fable is always read-only",
+          "passed": false
+        },
+        {
+          "name": "required_term:advisory Sonnet",
+          "passed": false
+        },
+        {
+          "name": "required_term:--workspace-write",
+          "passed": true
+        },
+        {
+          "name": "required_term:Read,Edit,Write,Glob,Grep",
+          "passed": true
+        },
+        {
+          "name": "required_term:Bash",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Fable can edit",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:Bash is available",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?is)only.*Sonnet.*implementer.*workspace-write.*edit",
+          "passed": false
+        },
+        {
+          "name": "forbidden_regex:(?im)^all Claude jobs are read-only",
+          "passed": true
+        }
+      ],
+      "output_path": "evals/permission-model-v031/runs/baseline/permission-overview.md"
+    },
+    {
+      "id": "fable-implementer-edge",
+      "split": "train",
+      "score": 3,
+      "max_score": 9,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:Fable remains read-only",
+          "passed": false
+        },
+        {
+          "name": "required_term:role does not grant",
+          "passed": false
+        },
+        {
+          "name": "required_term:--model sonnet",
+          "passed": false
+        },
+        {
+          "name": "required_term:--role implementer",
+          "passed": false
+        },
+        {
+          "name": "required_term:before agmsg send",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:Fable can edit",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:role implementer enables writes",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:ask for a one-off bypass",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)(reject|error|stop).*(Fable|workspace-write)",
+          "passed": false
+        }
+      ],
+      "output_path": "evals/permission-model-v031/runs/baseline/fable-implementer-edge.md"
+    },
+    {
+      "id": "validation-write-boundary",
+      "split": "validation",
+      "score": 5,
+      "max_score": 11,
+      "passed": false,
+      "checks": [
+        {
+          "name": "required_term:hard read-only",
+          "passed": false
+        },
+        {
+          "name": "required_term:--model sonnet",
+          "passed": false
+        },
+        {
+          "name": "required_term:--role implementer",
+          "passed": false
+        },
+        {
+          "name": "required_term:--workspace-write",
+          "passed": true
+        },
+        {
+          "name": "required_term:Read,Edit,Write,Glob,Grep",
+          "passed": true
+        },
+        {
+          "name": "required_term:Bash remains unavailable",
+          "passed": false
+        },
+        {
+          "name": "required_term:before agmsg send",
+          "passed": false
+        },
+        {
+          "name": "forbidden_term:Fable implementer can write",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:all Claude jobs are read-only",
+          "passed": true
+        },
+        {
+          "name": "forbidden_term:permission bypass",
+          "passed": true
+        },
+        {
+          "name": "required_regex:(?i)role.*(does not|doesn't|cannot).*(grant|enable|authorize).*(write|edit)",
+          "passed": false
+        }
+      ],
+      "output_path": "evals/permission-model-v031/runs/baseline/validation-write-boundary.md"
+    }
+  ]
+}

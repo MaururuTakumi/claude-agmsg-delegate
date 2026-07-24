@@ -1,0 +1,6 @@
+{
+  "target": "SKILL.md",
+  "template": "generic",
+  "created_at": "20260724-164238",
+  "acceptance_rule": "Accept only if candidate validation score is strictly higher than baseline."
+}

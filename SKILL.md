@@ -22,11 +22,28 @@ irreversible work.
 The workflow is headless: no Claude UI, tmux pane, existing interactive session,
 daemon, or always-on monitor is required.
 
-Current runtime contract: delegate version `0.3.0`, `contract_version=2`.
+Current runtime contract: delegate version `0.3.1`, `contract_version=2`.
 `Read,Glob,Grep` is the expected Fable/advisory Sonnet policy. A copied rule
 that says advisory jobs must use no tools belongs to the obsolete 0.1 contract;
 do not stop or ask for a one-off exception. Reinstall the current Skill, restart
 Codex, and confirm `delegate_claude.py --version` instead.
+
+## Permission Model
+
+Claude delegation is not entirely read-only. The wrapper enforces permissions
+by model and execution mode:
+
+| Request | Execution mode | Claude tools | File edits |
+| --- | --- | --- | --- |
+| Fable with any role | `workspace_read` | `Read,Glob,Grep` + `plan` | Never |
+| Sonnet without `--workspace-write` | `workspace_read` | `Read,Glob,Grep` + `plan` | No |
+| Sonnet implementer with explicit `--workspace-write` | `workspace_write` | `Read,Edit,Write,Glob,Grep` + `acceptEdits` | Yes, pending Codex review |
+
+A role label does not grant write authority. Fable remains hard read-only even
+with `--role implementer`; combining Fable with `--workspace-write` is rejected
+before agmsg send or Claude inference. Write mode requires all three explicit
+arguments: `--model sonnet --role implementer --workspace-write`. Bash remains
+unavailable in every mode, so Codex still runs commands and tests.
 
 ## Triage
 
@@ -51,6 +68,8 @@ Codex, and confirm `delegate_claude.py --version` instead.
 - Fable and non-write Sonnet jobs receive only `Read,Glob,Grep` with
   `--permission-mode plan`. Sonnet write jobs receive only
   `Read,Edit,Write,Glob,Grep` with `--permission-mode acceptEdits`.
+- Role names are descriptive, not authorization. Fable is hard read-only, and
+  `--workspace-write` is accepted only for a Sonnet implementer.
 - Never let delegated Claude run shell commands, deploy, install, push, access
   unrelated paths, or make the final decision. Codex performs commands and tests.
 - Do not update agmsg, join/reset roles, or change delivery hooks without separate user approval.
@@ -217,5 +236,5 @@ Confirm all of the following before accepting the delegated result:
    and ran relevant tests; Claude did not run commands, deploy, install, or push.
 7. The result covers the bounded request and labels assumptions.
 8. Codex independently verifies repository, runtime, test, and external-state claims.
-9. `delegate_version=0.3.0` and `contract_version=2`; no stale no-tools
+9. `delegate_version=0.3.1` and `contract_version=2`; no stale no-tools
    instruction overrode the installed runtime contract.
