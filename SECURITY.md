@@ -25,6 +25,12 @@ This project intentionally:
 - requires a paid Claude.ai `/login` OAuth session before send and rechecks it immediately before inference;
 - rejects API keys, auth tokens, custom base URLs, API-key helpers, and Bedrock, Vertex, Foundry, or Mantle routes with no fallback;
 - passes Claude a minimal environment allowlist and disables user, project, and local setting sources;
+- optionally fetches only explicitly selected GitHub Issues through the
+  authenticated `gh` CLI, outside Claude, without passing GitHub token
+  environment variables or enabling Bash;
+- requires explicit confirmation that Issue context contains no secrets,
+  credentials, patient information, or unnecessary personal data, omits
+  comment author identities, and rejects common secret patterns;
 - rechecks authentication after inference and discards output if the route changed;
 - runs headlessly without requiring a Claude UI, tmux session, daemon, or monitor.
 

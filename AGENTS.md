@@ -62,7 +62,7 @@ Do these in order before proposing changes or installing anything:
    This dry-run may execute the read-only local `claude auth status --json`
    command. It must not send agmsg, create job state, or run a model.
 
-10. Require delegate version `0.3.1` and `contract_version=2`, then report the resolved Claude binary, team, sender, receiver, model,
+10. Require delegate version `0.4.0` and `contract_version=3`, then report the resolved Claude binary, team, sender, receiver, model,
    `billing_mode: subscription`, paid `subscription_type`, execution mode,
    tool allowlist, and review requirement.
 
@@ -79,6 +79,9 @@ do not invoke Fable or Sonnet during dependency installation or verification.
 - Do not read or edit the agmsg database, team files, or config directly. Use provided scripts only.
 - Do not create, reset, rename, or change agmsg roles or delivery hooks without explicit approval.
 - Do not pass secrets, tokens, credentials, private keys, personal data, or raw large logs.
+- Do not use `--github-issue` until the selected Issue is explicitly confirmed
+  free of secrets, credentials, patient information, and unnecessary personal
+  data. The wrapper's secret-pattern rejection does not replace that review.
 - Do not use `--dangerously-skip-permissions` or weaken `--safe-mode`.
 - Do not add API-key, bearer-token, custom-base-URL, API-key-helper, Bedrock, Vertex, Foundry, Mantle, or other pay-as-you-go fallback paths.
 - Do not bypass `delegate_claude.py` by invoking agmsg scripts directly. The
@@ -109,6 +112,11 @@ do not invoke Fable or Sonnet during dependency installation or verification.
   runs with verbose `stream-json`; the wrapper accepts a result only when it
   observes project-contained Read evidence and returns project-relative
   `files_read` with `workspace_grounded=true`.
+- Optional Fable GitHub Issue context is fetched by the wrapper with an
+  authenticated `gh issue view` call for only the explicitly selected Issues.
+  It does not add Bash or GitHub tools to Claude, strips comment author
+  identities, excludes token environment variables, and is never fetched by
+  `--dry-run`.
 - Workspace-write responses set `review_required=true`. Codex must compare the
   pre-existing status with the resulting `git status --short` and `git diff --`,
   reject unrelated edits, and run relevant tests before acceptance.

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.4.0 — 2026-07-24
+
+- Add an explicit Fable `--github-issue` input path backed by the device's
+  authenticated `gh issue view` command.
+- Keep delegated Claude on `Read,Glob,Grep` with no Bash, inherited settings,
+  GitHub credentials, or write-capable GitHub tools.
+- Add safe-context confirmation, common-secret rejection, author-identity
+  omission, reference/count/size limits, and untrusted-context framing.
+- Preserve dry-run's no-network guarantee: Issue references are validated and
+  declared but not fetched.
+- Add fixture coverage for Issue ingestion, token-environment isolation,
+  secret rejection, and unchanged Fable tool permissions.
+
 ## 0.3.1 — 2026-07-24
 
 - Add an explicit permission matrix clarifying that Fable is hard read-only,

@@ -183,6 +183,40 @@ print(json.dumps({
 }))
 '''
 
+FAKE_GH = r'''#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+log_path = os.environ.get("FAKE_GH_INVOCATION_LOG")
+if log_path:
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps({
+          "args": args,
+          "gh_token_present": "GH_TOKEN" in os.environ,
+          "github_token_present": "GITHUB_TOKEN" in os.environ,
+        }) + "\n")
+if args[:2] != ["issue", "view"]:
+    raise SystemExit("unsupported fake gh request")
+response = os.environ.get("FAKE_GH_RESPONSE")
+if response:
+    print(response)
+else:
+    repo = args[args.index("--repo") + 1]
+    number = int(args[2])
+    print(json.dumps({
+      "number": number,
+      "title": "Fixture issue",
+      "body": "Review the migration boundary.",
+      "state": "OPEN",
+      "url": f"https://github.com/{repo}/issues/{number}",
+      "labels": [{"name": "architecture"}],
+      "comments": [{
+        "author": {"login": "private-author"},
+        "body": "Preserve the v1 checkpoint.",
+        "createdAt": "2026-07-24T00:00:00Z",
+      }],
+    }))
+'''
+
 
 class DelegateTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -202,6 +236,9 @@ class DelegateTests(unittest.TestCase):
         self.claude = self.base / "claude"
         self.claude.write_text(FAKE_CLAUDE, encoding="utf-8")
         self.claude.chmod(0o755)
+        self.gh = self.base / "gh"
+        self.gh.write_text(FAKE_GH, encoding="utf-8")
+        self.gh.chmod(0o755)
         self.db = self.base / "messages.db.txt"
         self.state = self.base / "state"
         self.env = os.environ.copy()
@@ -315,8 +352,8 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--dry-run"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "dry_run")
-        self.assertEqual(payload["delegate_version"], "0.3.1")
-        self.assertEqual(payload["contract_version"], 2)
+        self.assertEqual(payload["delegate_version"], "0.4.0")
+        self.assertEqual(payload["contract_version"], 3)
         self.assertEqual(payload["agmsg_reader"], "api.sh")
         self.assertEqual(
             payload["claude_policy"],
@@ -331,6 +368,12 @@ class DelegateTests(unittest.TestCase):
                 "auth_method": "claude.ai",
                 "api_provider": "firstParty",
                 "subscription_type": "max",
+                "github_issue_context": {
+                    "enabled": False,
+                    "source": None,
+                    "network_fetched": False,
+                    "write_capable": False,
+                },
             },
         )
         self.assertEqual(payload["request"]["billing_mode"], "subscription")
@@ -338,12 +381,145 @@ class DelegateTests(unittest.TestCase):
         self.assertFalse(self.state.exists())
         self.assertFalse(invocation_log.exists())
 
+    def test_github_issue_dry_run_declares_context_without_network_fetch(self) -> None:
+        gh_log = self.base / "gh-invocations.jsonl"
+        env = self.env.copy()
+        env["FAKE_GH_INVOCATION_LOG"] = str(gh_log)
+        command = self.command(
+            "--github-issue",
+            "owner/repo#42",
+            "--confirm-github-issue-context-safe",
+            "--gh-bin",
+            str(self.gh),
+            "--dry-run",
+        )
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["status"], "dry_run")
+        self.assertEqual(
+            payload["request"]["github_issue_context"],
+            {
+                "status": "not_fetched_dry_run",
+                "source": "authenticated_gh_cli",
+                "references": ["owner/repo#42"],
+                "confirmed_safe": True,
+                "write_capable": False,
+            },
+        )
+        self.assertEqual(
+            payload["claude_policy"]["github_issue_context"],
+            {
+                "enabled": True,
+                "source": "authenticated_gh_cli",
+                "network_fetched": False,
+                "write_capable": False,
+            },
+        )
+        self.assertFalse(gh_log.exists())
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_github_issue_requires_explicit_safe_context_confirmation(self) -> None:
+        command = self.command(
+            "--github-issue",
+            "owner/repo#42",
+            "--gh-bin",
+            str(self.gh),
+            "--dry-run",
+        )
+        result, payload = self.run_json(command)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--confirm-github-issue-context-safe", payload["error"])
+        self.assertIn("patient information", payload["error"])
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_fable_receives_read_only_github_issue_context_without_bash_or_token(self) -> None:
+        gh_log = self.base / "gh-invocations.jsonl"
+        claude_log = self.base / "claude-invocations.jsonl"
+        env = self.env.copy()
+        env["FAKE_GH_INVOCATION_LOG"] = str(gh_log)
+        env["FAKE_CLAUDE_INVOCATION_LOG"] = str(claude_log)
+        env["GH_TOKEN"] = "must-not-reach-gh-process"
+        env["GITHUB_TOKEN"] = "must-not-reach-gh-process"
+        command = self.command(
+            "--github-issue",
+            "owner/repo#42",
+            "--confirm-github-issue-context-safe",
+            "--gh-bin",
+            str(self.gh),
+            "--timeout",
+            "5",
+        )
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["github_issues_read"], ["owner/repo#42"])
+        self.assertEqual(payload["github_context_source"], "authenticated_gh_cli")
+        self.assertEqual(payload["tools"], ["Read", "Glob", "Grep"])
+
+        gh_invocation = json.loads(gh_log.read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual(
+            gh_invocation["args"],
+            [
+                "issue",
+                "view",
+                "42",
+                "--repo",
+                "owner/repo",
+                "--json",
+                "number,title,body,state,url,labels,comments",
+            ],
+        )
+        self.assertFalse(gh_invocation["gh_token_present"])
+        self.assertFalse(gh_invocation["github_token_present"])
+
+        claude_invocation = json.loads(
+            claude_log.read_text(encoding="utf-8").splitlines()[0]
+        )
+        prompt = claude_invocation[0]
+        self.assertIn("Fixture issue", prompt)
+        self.assertIn("Preserve the v1 checkpoint.", prompt)
+        self.assertIn("untrusted source data", prompt)
+        self.assertNotIn("private-author", prompt)
+        tools_index = claude_invocation.index("--tools")
+        self.assertEqual(claude_invocation[tools_index + 1], "Read,Glob,Grep")
+        self.assertNotIn("Bash", claude_invocation[tools_index + 1])
+
+    def test_secret_like_github_issue_is_rejected_before_agmsg_send(self) -> None:
+        env = self.env.copy()
+        env["FAKE_GH_RESPONSE"] = json.dumps(
+            {
+                "number": 42,
+                "title": "Credential rotation",
+                "body": "api_key=fixture-secret-value",
+                "state": "OPEN",
+                "url": "https://github.com/owner/repo/issues/42",
+                "labels": [],
+                "comments": [],
+            }
+        )
+        command = self.command(
+            "--github-issue",
+            "owner/repo#42",
+            "--confirm-github-issue-context-safe",
+            "--gh-bin",
+            str(self.gh),
+            "--timeout",
+            "5",
+        )
+        result, payload = self.run_json(command, env)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("appears to contain a secret", payload["error"])
+        self.assertFalse(self.db.exists())
+        self.assertFalse(self.state.exists())
+
     def test_doctor_reports_healthy_setup_without_mutation(self) -> None:
         result, payload = self.run_json(self.doctor_command())
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["delegate_version"], "0.3.1")
-        self.assertEqual(payload["contract_version"], 2)
+        self.assertEqual(payload["delegate_version"], "0.4.0")
+        self.assertEqual(payload["contract_version"], 3)
         self.assertFalse(payload["mutating"])
         self.assertFalse(payload["model_invoked"])
         self.assertFalse(payload["network_required"])
@@ -462,8 +638,8 @@ class DelegateTests(unittest.TestCase):
         result, payload = self.run_json(self.command("--timeout", "5"), env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(payload["status"], "completed")
-        self.assertEqual(payload["delegate_version"], "0.3.1")
-        self.assertEqual(payload["contract_version"], 2)
+        self.assertEqual(payload["delegate_version"], "0.4.0")
+        self.assertEqual(payload["contract_version"], 3)
         self.assertTrue(payload["workspace_grounded"])
         self.assertEqual(payload["files_read"], ["README.md"])
         self.assertEqual(payload["actual_model"], "claude-fable-test")
@@ -698,8 +874,8 @@ class DelegateTests(unittest.TestCase):
         state = {
             "job_id": job_id,
             "status": "running",
-            "delegate_version": "0.3.1",
-            "contract_version": 2,
+            "delegate_version": "0.4.0",
+            "contract_version": 3,
             "model": "fable",
             "role": "reviewer",
             "execution_mode": "workspace_read",

@@ -22,11 +22,17 @@ irreversible work.
 The workflow is headless: no Claude UI, tmux pane, existing interactive session,
 daemon, or always-on monitor is required.
 
-Current runtime contract: delegate version `0.3.1`, `contract_version=2`.
+Current runtime contract: delegate version `0.4.0`, `contract_version=3`.
 `Read,Glob,Grep` is the expected Fable/advisory Sonnet policy. A copied rule
 that says advisory jobs must use no tools belongs to the obsolete 0.1 contract;
 do not stop or ask for a one-off exception. Reinstall the current Skill, restart
 Codex, and confirm `delegate_claude.py --version` instead.
+
+Fable may also receive explicitly selected GitHub Issue context through
+`--github-issue`. The wrapper, not Fable, reads the Issue with the device's
+authenticated `gh` CLI and supplies a bounded snapshot of its title, body,
+labels, and comments. This does not add Bash, GitHub credentials, settings, or
+write-capable GitHub tools to Fable.
 
 ## Permission Model
 
@@ -44,6 +50,14 @@ with `--role implementer`; combining Fable with `--workspace-write` is rejected
 before agmsg send or Claude inference. Write mode requires all three explicit
 arguments: `--model sonnet --role implementer --workspace-write`. Bash remains
 unavailable in every mode, so Codex still runs commands and tests.
+
+GitHub Issue context is a separate read-only input channel, not a Claude tool.
+It is currently supported only for Fable. Use `--github-issue` together with
+`--confirm-github-issue-context-safe`; the latter confirms that the selected
+Issue contains no secrets, credentials, patient information, or unnecessary
+personal data. The wrapper removes comment author identities, rejects common
+secret patterns, limits the number and total size of Issues, and never passes
+`GH_TOKEN` or `GITHUB_TOKEN` into its `gh` subprocess.
 
 ## Triage
 
@@ -72,6 +86,11 @@ unavailable in every mode, so Codex still runs commands and tests.
   `--workspace-write` is accepted only for a Sonnet implementer.
 - Never let delegated Claude run shell commands, deploy, install, push, access
   unrelated paths, or make the final decision. Codex performs commands and tests.
+- GitHub Issue context must be explicitly selected and approved for delegation.
+  Use only the wrapper's read-only `--github-issue` path. Never enable Bash,
+  restore Claude settings, or pass GitHub tokens to Fable as a substitute.
+- `--dry-run` validates Issue references and declares the intended source but
+  does not fetch them or make a GitHub network request.
 - Do not update agmsg, join/reset roles, or change delivery hooks without separate user approval.
 - When updating this Skill, keep backups outside the Codex Skill discovery
   directory. After installation, restart Codex and start a new task so cached
@@ -160,6 +179,22 @@ python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py run \
   --timeout 60
 ```
 
+For a Fable review grounded in one approved GitHub Issue:
+
+```bash
+python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py run \
+  --model fable \
+  --role reviewer \
+  --github-issue OWNER/REPO#123 \
+  --confirm-github-issue-context-safe \
+  --task "Review the Issue requirements and identify design risks." \
+  --timeout 60
+```
+
+`--github-issue` also accepts a current-repository Issue number or a full
+`https://github.com/OWNER/REPO/issues/NUMBER` URL and may be repeated up to five
+times. The wrapper uses the logged-in `gh` CLI only to read those exact Issues.
+
 For advisory Sonnet planning:
 
 ```bash
@@ -202,6 +237,9 @@ Use `--dry-run` to validate the paid-subscription auth status, routing, and requ
   forward Claude CLI monetary usage estimates such as `total_cost_usd` or
   `cost_usd`; those fields are intentionally omitted from the wrapper result.
   Report only the verified subscription route.
+  When Issue context was enabled, also require
+  `github_context_source=authenticated_gh_cli` and verify that
+  `github_issues_read` contains only the explicitly selected references.
 - `status=running`: the synchronous wait expired. Inspect `worker_stage` and
   `running_seconds`; do not re-run the same task. Use the returned
   `collect_command`, which waits 60 seconds. A dead detached worker becomes
@@ -236,5 +274,8 @@ Confirm all of the following before accepting the delegated result:
    and ran relevant tests; Claude did not run commands, deploy, install, or push.
 7. The result covers the bounded request and labels assumptions.
 8. Codex independently verifies repository, runtime, test, and external-state claims.
-9. `delegate_version=0.3.1` and `contract_version=2`; no stale no-tools
+9. `delegate_version=0.4.0` and `contract_version=3`; no stale no-tools
    instruction overrode the installed runtime contract.
+10. If GitHub Issue context was used, it was explicitly confirmed safe,
+    `github_issues_read` matches the requested references, and Fable still had
+    exactly `Read,Glob,Grep` with no Bash or GitHub credential exposure.

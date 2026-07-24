@@ -34,6 +34,12 @@ in every mode; Codex runs commands and tests and reviews the resulting diff.
 
 The worker is subscription-only and fail-closed: it runs only when Claude Code reports a paid Claude.ai OAuth session. API keys, bearer-token gateways, custom base URLs, and Bedrock, Vertex, Foundry, or Mantle routes are rejected before inference.
 
+Fable can optionally review explicitly selected GitHub Issues through
+`--github-issue`. The wrapper reads only those Issues with the authenticated
+device `gh` CLI and supplies a bounded context snapshot. Fable still receives
+only `Read,Glob,Grep`; it never receives Bash, GitHub credentials, user settings,
+or write-capable GitHub tools.
+
 ## Give this repository to your AI
 
 Paste this into Codex or another coding agent:
@@ -49,7 +55,7 @@ Before the final Skill dry-run, verify that ~/.agents/skills/agmsg/scripts/whoam
 If agmsg is missing or outdated, stop and ask me for explicit approval before running npx agmsg, joining a team, or choosing a delivery mode. Do not guess those settings or edit agmsg files directly.
 After I approve, install agmsg and change to the target project where delegation will be used. If no teams exist, propose <target-project-name>-team and codex, show both, and wait for my confirmation before join.sh. Ask for delivery separately: recommend 1) turn, allow 2) off, and never choose monitor or both. Empty input or Enter means turn. Use only the provided whoami.sh, join.sh, and delivery.sh procedures. Do not join the temporary Skill clone just to pass verification. Then resume the final dry-run from the target project without invoking a Claude model.
 Do not run a Claude model or spend model usage during installation.
-Verify delegate_claude.py --version is 0.3.1.
+Verify delegate_claude.py --version is 0.4.0.
 Verify the installation with delegate_claude.py --dry-run; this may run the local read-only `claude auth status --json` check, but must not send an agmsg job or run model inference.
 Report the resolved route, subscription-only policy, execution mode, tool allowlist, and review requirement. Never display or forward Claude CLI monetary usage estimates.
 ```
@@ -66,6 +72,8 @@ That is the recommended installation path for vibe coders: let your AI inspect, 
 - Claude Code authenticated through `claude auth login`, not an API key
 - [agmsg](https://github.com/fujibee/agmsg) installed at `~/.agents/skills/agmsg`
 - The current project joined to one agmsg team so its team name can be inferred
+- Optional: an authenticated [GitHub CLI](https://cli.github.com/) session for
+  the explicit Fable `--github-issue` input path
 
 For strictly zero variable charges, also open Claude **Settings → Usage** and turn **Extra usage / usage credits off**. The wrapper can prove and enforce the active credential route, but the documented Claude CLI does not expose that account-level switch. An already enabled usage-credit setting cannot be disabled by this repository.
 
@@ -173,6 +181,8 @@ integrator, and final decision-maker.
 Codex Desktop
   ├─ preflight: claude auth status --json
   │    └─ require claude.ai + firstParty + paid subscription
+  ├─ optional Issue context: authenticated gh issue view
+  │    └─ exact opt-in references, read-only, no token passed to Claude
   └─ agmsg delegate_request { job_id, model, role, task }
        └─ detached worker
             ├─ repeat the subscription preflight
@@ -204,7 +214,7 @@ Sonnet workspace implementation adds `--tools "Read,Edit,Write,Glob,Grep"
 --permission-mode acceptEdits`. Neither mode enables Bash or a permission
 bypass.
 
-Version `0.3.1` uses runtime `contract_version=2`. It requires at least one
+Version `0.4.0` uses runtime `contract_version=3`. It requires at least one
 observed `Read` tool event before accepting a Fable or Sonnet result. The wrapper
 returns `workspace_grounded=true` and project-relative `files_read`; a missing
 Read event or an observed path outside the selected project discards the result.
@@ -220,6 +230,26 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/claude-agmsg-delegate/scripts/delega
   --task "Review this bounded proposal and list its top risks." \
   --timeout 60
 ```
+
+Fable review with one approved GitHub Issue:
+
+```bash
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/claude-agmsg-delegate/scripts/delegate_claude.py" run \
+  --model fable \
+  --role reviewer \
+  --github-issue OWNER/REPO#123 \
+  --confirm-github-issue-context-safe \
+  --task "Review the Issue requirements and identify design risks." \
+  --timeout 60
+```
+
+`--github-issue` accepts `NUMBER`, `OWNER/REPO#NUMBER`, or a full github.com
+Issue URL and may be repeated up to five times. The explicit confirmation is
+required because automated secret-pattern rejection cannot determine whether
+arbitrary prose contains patient information or unnecessary personal data.
+Comment author identities are omitted from the context. The wrapper invokes
+`gh issue view` with an argument array and excludes `GH_TOKEN` and
+`GITHUB_TOKEN` from that subprocess; the `gh` CLI uses its existing local login.
 
 Sonnet implementation design without edits:
 
@@ -256,7 +286,10 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/claude-agmsg-delegate/scripts/delega
   --dry-run
 ```
 
-`--dry-run` executes the local read-only Claude authentication-status command. It does not call a model, create a job state directory, or send an agmsg message.
+`--dry-run` executes the local read-only Claude authentication-status command.
+It does not call a model, create a job state directory, send an agmsg message,
+or fetch a requested GitHub Issue. With `--github-issue`, it validates and
+reports the intended references only.
 
 If the synchronous wait expires, the detached worker continues and returns `status: running`. Collect the same job later instead of launching a duplicate:
 
@@ -276,8 +309,8 @@ Completed result:
 {
   "job_id": "cad-sonnet-20260715T024848Z-a1b2c3",
   "status": "completed",
-  "delegate_version": "0.3.1",
-  "contract_version": 2,
+  "delegate_version": "0.4.0",
+  "contract_version": 3,
   "requested_model": "sonnet",
   "actual_model": "claude-sonnet-5",
   "role": "implementer",
@@ -295,6 +328,10 @@ Completed result:
   "elapsed_seconds": 51.2
 }
 ```
+
+For a Fable job using `--github-issue`, the completed result additionally
+contains `github_issues_read` (for example `["owner/repo#123"]`) and
+`github_context_source: "authenticated_gh_cli"`.
 
 The authentication fields come from the worker's subscription checks immediately before and after inference. The wrapper drops Claude CLI monetary usage fields such as `total_cost_usd` and `cost_usd` from its result, agmsg response, saved public state, and terminal output. Codex must not display or paraphrase those estimates; it reports only the verified subscription route.
 
@@ -357,6 +394,12 @@ The delegate mailbox names are used only for the agmsg request/response record; 
 - API keys, auth tokens, custom base URLs, API-key helpers, and cloud-provider routes fail closed.
 - Claude receives a minimal environment allowlist, so unknown future provider variables are not inherited.
 - `--safe-mode --setting-sources ""` prevents user, project, and local Claude settings from changing the worker route; admin-managed policy still applies and is covered by the pre/post auth checks.
+- Optional GitHub Issue context is fetched outside Claude with the authenticated
+  `gh` CLI for only explicitly selected references. It does not grant Bash or
+  GitHub tools to Claude and does not pass GitHub token environment variables.
+- Issue context requires an explicit safe-context confirmation, omits comment
+  author identities, rejects common secret patterns, and is bounded to five
+  Issues and 60,000 characters total.
 - There is no API-key or provider fallback when subscription authentication fails or reaches a limit.
 - The worker disables the in-CLI usage-credit command and implicit 1M-context variants as defense in depth.
 - Account-level Extra usage / usage credits must separately remain off for a zero-variable-charge guarantee.
@@ -408,7 +451,7 @@ python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --versi
 
 The installer migrates its old `claude-agmsg-delegate.backup-*` directories
 outside `skills/` and stops if an unrelated same-name copy remains. The expected
-version is `0.3.1`. Restart Codex and start a new task; an already-running task
+version is `0.4.0`. Restart Codex and start a new task; an already-running task
 may retain the Skill instructions it loaded before the update.
 
 ### `subscription-only policy blocked ...`
@@ -487,7 +530,7 @@ exception. Update and reinstall the Skill, restart Codex, then verify:
 python3 ~/.codex/skills/claude-agmsg-delegate/scripts/delegate_claude.py --version
 ```
 
-The expected version is `0.3.1`; dry-run reports `contract_version: 2`. A real
+The expected version is `0.4.0`; dry-run reports `contract_version: 3`. A real
 completed job must also report `workspace_grounded: true` and non-empty
 project-relative `files_read`. A dry-run alone never proves that files were read.
 
